@@ -44,44 +44,44 @@ class ScratchCanvas {
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'scratch-toolbar';
     this.toolbar.innerHTML = `
-      <div class="toolbar-tools">
-        <button class="tool-btn active" data-tool="pen" title="Pen (P)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-          </svg>
-        </button>
-        <button class="tool-btn" data-tool="highlighter" title="Highlighter (H)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11 9h5.5L11 3.5V9zM7.5 6.5C6.12 6.5 5 7.62 5 9v10.5c0 1.38 1.12 2.5 2.5 2.5h9c1.38 0 2.5-1.12 2.5-2.5V9H13V3.5h-3c-1.38 0-2.5 1.12-2.5 2.5V6.5z"/>
-          </svg>
-        </button>
-        <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-6.36-6.36-3.54 3.54c-.78.78-.78 2.05 0 2.82z"/>
-          </svg>
-        </button>
-      </div>
-      <div class="toolbar-colors">
-        <div class="color-picker">
-          <div class="color-swatch active" data-color="#000000" style="background-color: #000000;" title="Black"></div>
-          <div class="color-swatch" data-color="#FF0000" style="background-color: #FF0000;" title="Red"></div>
-          <div class="color-swatch" data-color="#00FF00" style="background-color: #00FF00;" title="Green"></div>
-          <div class="color-swatch" data-color="#0000FF" style="background-color: #0000FF;" title="Blue"></div>
-          <div class="color-swatch" data-color="#FFFF00" style="background-color: #FFFF00;" title="Yellow"></div>
-          <div class="color-swatch" data-color="#FF00FF" style="background-color: #FF00FF;" title="Magenta"></div>
-          <input type="color" id="custom-color" value="#000000" title="Custom color">
-        </div>
-      </div>
-      <button class="clear-btn" title="Clear all (Ctrl+Shift+C)">
+      <div class="toolbar-drag-handle" title="Drag to move"></div>
+      <button class="tool-btn active" data-tool="pen" title="Pen (P)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="highlighter" title="Highlighter (H)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11 9h5.5L11 3.5V9zM7.5 6.5C6.12 6.5 5 7.62 5 9v10.5c0 1.38 1.12 2.5 2.5 2.5h9c1.38 0 2.5-1.12 2.5-2.5V9H13V3.5h-3c-1.38 0-2.5 1.12-2.5 2.5V6.5z"/>
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-6.36-6.36-3.54 3.54c-.78.78-.78 2.05 0 2.82z"/>
+        </svg>
+      </button>
+      <div class="toolbar-divider"></div>
+      <div class="color-swatch active" data-color="#000000" style="background-color: #000000;" title="Black"></div>
+      <div class="color-swatch" data-color="#FF0000" style="background-color: #FF0000;" title="Red"></div>
+      <div class="color-swatch" data-color="#0000FF" style="background-color: #0000FF;" title="Blue"></div>
+      <input type="color" id="custom-color" value="#000000" title="Custom color">
+      <div class="toolbar-divider"></div>
+      <button class="clear-btn" title="Clear all (Ctrl+Shift+C)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
         </svg>
       </button>
     `;
 
+    // Position toolbar
+    this.toolbar.style.left = '50%';
+    this.toolbar.style.top = '20px';
+    this.toolbar.style.transform = 'translateX(-50%)';
+
     document.body.appendChild(this.toolbar);
     console.log('Toolbar appended to body:', this.toolbar);
     this.setupToolbarEvents();
+    this.setupToolbarDrag();
   }
 
   setupToolbarEvents() {
@@ -111,6 +111,48 @@ class ScratchCanvas {
     this.toolbar.querySelector('.clear-btn').addEventListener('click', () => {
       this.clearCanvas();
     });
+  }
+
+  setupToolbarDrag() {
+    const handle = this.toolbar.querySelector('.toolbar-drag-handle');
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+
+    const handleMouseDown = (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      const rect = this.toolbar.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+
+      this.toolbar.style.transform = 'none';
+      this.toolbar.style.left = startLeft + 'px';
+      this.toolbar.style.top = startTop + 'px';
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      e.preventDefault();
+    };
+
+    const handleMouseMove = (e) => {
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+
+      this.toolbar.style.left = (startLeft + deltaX) + 'px';
+      this.toolbar.style.top = (startTop + deltaY) + 'px';
+    };
+
+    const handleMouseUp = () => {
+      isDragging = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    handle.addEventListener('mousedown', handleMouseDown);
   }
 
   setTool(tool) {
@@ -257,7 +299,11 @@ class ScratchCanvas {
     // Prevent toolbar clicks from triggering toggle
     if (e.target.closest('#scratch-toolbar')) return;
 
+    // Prevent if currently drawing
+    if (this.isDrawing) return;
+
     e.preventDefault();
+    e.stopPropagation();
     this.toggleDrawingMode();
     console.log('Double-click toggle:', this.isActive);
   }

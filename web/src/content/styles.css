@@ -4,32 +4,48 @@
 
 #scratch-toolbar {
   position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
   display: none;
-  flex-direction: column;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.75);
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 10px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  padding: 6px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   z-index: 999999;
   user-select: none;
+  cursor: move;
 }
 
-.toolbar-tools {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.toolbar-drag-handle {
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(to bottom,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.3) 100%);
+  border-radius: 2px;
+  cursor: grab;
+  margin-right: 4px;
+}
+
+.toolbar-drag-handle:active {
+  cursor: grabbing;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 2px;
 }
 
 .tool-btn {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 50%;
   background: transparent;
@@ -43,56 +59,45 @@
 }
 
 .tool-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.1);
 }
 
 .tool-btn.active {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .tool-btn svg {
   pointer-events: none;
 }
 
-.toolbar-colors {
-  display: flex;
-  justify-content: center;
-}
-
-.color-picker {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
 .color-swatch {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   transition: all 0.2s ease;
   position: relative;
 }
 
 .color-swatch:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+  transform: scale(1.2);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
 }
 
 .color-swatch.active {
   border: 2px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
-  transform: scale(1.05);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
 }
 
 #custom-color {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   background: transparent;
   cursor: pointer;
   outline: none;
@@ -109,8 +114,8 @@
 }
 
 .clear-btn {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
@@ -120,12 +125,11 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  margin-left: 8px;
 }
 
 .clear-btn:hover {
-  background: rgba(255, 0, 0, 0.2);
-  transform: scale(1.05);
+  background: rgba(255, 0, 0, 0.3);
+  transform: scale(1.15);
 }
 
 /* Pen cursor for drawing mode */
