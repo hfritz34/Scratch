@@ -172,35 +172,77 @@ class ScratchCanvas {
   }
 
   setupToolbarEvents() {
-    // Tool selection with size slider
+    // Tool selection with hover-based size slider
     this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
+      // Click to select tool
       btn.addEventListener('click', (e) => {
         const tool = e.currentTarget.dataset.tool;
+        this.setTool(tool);
+      });
 
-        // If clicking the same tool, show size slider
+      // Hover to show size slider for current tool
+      btn.addEventListener('mouseenter', (e) => {
+        const tool = e.currentTarget.dataset.tool;
         if (tool === this.currentTool && ['pen', 'highlighter', 'eraser'].includes(tool)) {
           this.showSizeSlider(e.currentTarget);
-        } else {
-          this.setTool(tool);
-          this.hideSizeSlider();
+        }
+      });
+
+      btn.addEventListener('mouseleave', (e) => {
+        const tool = e.currentTarget.dataset.tool;
+        if (tool === this.currentTool && ['pen', 'highlighter', 'eraser'].includes(tool)) {
+          this.resetSliderTimeout();
         }
       });
     });
 
-    // Color selection
+    // Color selection with hover preview
     this.toolbar.querySelectorAll('.color-swatch').forEach(swatch => {
       swatch.addEventListener('click', (e) => {
         const color = e.currentTarget.dataset.color;
         this.setColor(color);
       });
+
+      // Hover effects for color swatches
+      swatch.addEventListener('mouseenter', (e) => {
+        const color = e.currentTarget.dataset.color;
+        if (color !== this.currentColor) {
+          e.currentTarget.style.transform = 'scale(1.2)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)';
+        }
+      });
+
+      swatch.addEventListener('mouseleave', (e) => {
+        if (!e.currentTarget.classList.contains('active')) {
+          e.currentTarget.style.transform = '';
+          e.currentTarget.style.boxShadow = '';
+        }
+      });
     });
 
-    // Palette button
+    // Palette button with hover preview
     const paletteBtn = this.toolbar.querySelector('.palette-btn');
     if (paletteBtn) {
+      let hoverTimeout = null;
+
       paletteBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.switchPalette();
+      });
+
+      // Hover to preview next palette
+      paletteBtn.addEventListener('mouseenter', (e) => {
+        hoverTimeout = setTimeout(() => {
+          this.previewNextPalette();
+        }, 500); // Show preview after 500ms hover
+      });
+
+      paletteBtn.addEventListener('mouseleave', (e) => {
+        if (hoverTimeout) {
+          clearTimeout(hoverTimeout);
+          hoverTimeout = null;
+        }
+        this.clearPalettePreview();
       });
     }
 
@@ -948,6 +990,54 @@ class ScratchCanvas {
     swatches[0].classList.add('active');
     for (let i = 1; i < swatches.length; i++) {
       swatches[i].classList.remove('active');
+    }
+  }
+
+  previewNextPalette() {
+    const paletteNames = Object.keys(this.palettes);
+    const currentIndex = paletteNames.indexOf(this.currentPalette);
+    const nextIndex = (currentIndex + 1) % paletteNames.length;
+    const nextPalette = paletteNames[nextIndex];
+
+    // Store original colors for restoration
+    this.originalColors = this.getCurrentPaletteColors();
+
+    // Temporarily show next palette colors
+    const colors = this.palettes[nextPalette];
+    const swatches = this.toolbar.querySelectorAll('.color-swatch');
+
+    swatches.forEach((swatch, index) => {
+      if (index < colors.length) {
+        swatch.style.backgroundColor = colors[index];
+        swatch.style.opacity = '0.7'; // Make it look like a preview
+      }
+    });
+
+    // Add visual indicator that this is a preview
+    const paletteBtn = this.toolbar.querySelector('.palette-btn');
+    if (paletteBtn) {
+      paletteBtn.style.backgroundColor = 'rgba(0, 122, 255, 0.2)';
+    }
+  }
+
+  clearPalettePreview() {
+    if (this.originalColors) {
+      const swatches = this.toolbar.querySelectorAll('.color-swatch');
+
+      swatches.forEach((swatch, index) => {
+        if (index < this.originalColors.length) {
+          swatch.style.backgroundColor = this.originalColors[index];
+          swatch.style.opacity = '1'; // Restore full opacity
+        }
+      });
+
+      this.originalColors = null;
+    }
+
+    // Clear palette button highlight
+    const paletteBtn = this.toolbar.querySelector('.palette-btn');
+    if (paletteBtn) {
+      paletteBtn.style.backgroundColor = '';
     }
   }
 
