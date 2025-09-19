@@ -101,10 +101,11 @@ class ScratchCanvas {
       </button>
     `;
 
-    // Position toolbar
+    // Position toolbar at top center initially
     this.toolbar.style.left = '50%';
     this.toolbar.style.top = '20px';
     this.toolbar.style.transform = 'translateX(-50%)';
+    this.toolbarPosition = null; // Not snapped to edge initially
 
     document.body.appendChild(this.toolbar);
     console.log('Toolbar appended to body:', this.toolbar);
@@ -145,7 +146,7 @@ class ScratchCanvas {
     const handle = this.toolbar.querySelector('.toolbar-drag-handle');
     let isDragging = false;
     let startX, startY, startLeft, startTop;
-    this.toolbarPosition = 'top'; // Track toolbar position for rotation
+    this.toolbarPosition = null; // Track toolbar position for rotation
 
     const handleMouseDown = (e) => {
       isDragging = true;
@@ -156,6 +157,9 @@ class ScratchCanvas {
       const rect = this.toolbar.getBoundingClientRect();
       startLeft = rect.left;
       startTop = rect.top;
+
+      // Clear any edge positioning since we're manually dragging
+      this.toolbarPosition = null;
 
       // Reset any rotation first
       this.toolbar.style.transform = 'none';
@@ -281,7 +285,6 @@ class ScratchCanvas {
   keepToolbarInBounds() {
     if (!this.toolbar || !this.isActive) return;
 
-    const rect = this.toolbar.getBoundingClientRect();
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const margin = 20;
@@ -292,32 +295,69 @@ class ScratchCanvas {
       return;
     }
 
-    // Otherwise, make sure it's within bounds
+    // Get current position
+    let currentLeft = parseInt(this.toolbar.style.left) || 0;
+    let currentTop = parseInt(this.toolbar.style.top) || 0;
+
+    // Reset transform to get accurate measurements
+    const originalTransform = this.toolbar.style.transform;
+    this.toolbar.style.transform = 'none';
+    const rect = this.toolbar.getBoundingClientRect();
+
     let needsUpdate = false;
-    let newLeft = parseInt(this.toolbar.style.left);
-    let newTop = parseInt(this.toolbar.style.top);
+    let newLeft = currentLeft;
+    let newTop = currentTop;
 
-    // Check horizontal bounds
-    if (rect.right > windowWidth - margin) {
-      newLeft = windowWidth - rect.width - margin;
-      needsUpdate = true;
-    } else if (rect.left < margin) {
-      newLeft = margin;
-      needsUpdate = true;
+    // Check if centered (has translateX)
+    if (originalTransform.includes('translateX(-50%)')) {
+      // Handle centered toolbar
+      const toolbarWidth = rect.width;
+      const maxLeft = windowWidth - toolbarWidth / 2 - margin;
+      const minLeft = toolbarWidth / 2 + margin;
+
+      // Convert percentage to pixels if needed
+      if (this.toolbar.style.left === '50%') {
+        newLeft = windowWidth / 2;
+      }
+
+      if (newLeft > maxLeft) {
+        newLeft = maxLeft;
+        needsUpdate = true;
+      } else if (newLeft < minLeft) {
+        newLeft = minLeft;
+        needsUpdate = true;
+      }
+    } else {
+      // Handle non-centered toolbar
+      const toolbarWidth = rect.width;
+      const toolbarHeight = rect.height;
+
+      // Check horizontal bounds
+      if (currentLeft + toolbarWidth > windowWidth - margin) {
+        newLeft = windowWidth - toolbarWidth - margin;
+        needsUpdate = true;
+      } else if (currentLeft < margin) {
+        newLeft = margin;
+        needsUpdate = true;
+      }
+
+      // Check vertical bounds
+      if (currentTop + toolbarHeight > windowHeight - margin) {
+        newTop = windowHeight - toolbarHeight - margin;
+        needsUpdate = true;
+      } else if (currentTop < margin) {
+        newTop = margin;
+        needsUpdate = true;
+      }
     }
 
-    // Check vertical bounds
-    if (rect.bottom > windowHeight - margin) {
-      newTop = windowHeight - rect.height - margin;
-      needsUpdate = true;
-    } else if (rect.top < margin) {
-      newTop = margin;
-      needsUpdate = true;
-    }
-
+    // Restore transform and update position if needed
     if (needsUpdate) {
       this.toolbar.style.left = newLeft + 'px';
       this.toolbar.style.top = newTop + 'px';
+      this.toolbar.style.transform = originalTransform;
+    } else {
+      this.toolbar.style.transform = originalTransform;
     }
   }
 
@@ -387,9 +427,15 @@ class ScratchCanvas {
   }
 
   setupEventListeners() {
+    let resizeTimeout;
     window.addEventListener('resize', () => {
       this.resizeCanvas();
-      this.keepToolbarInBounds();
+
+      // Debounce toolbar repositioning
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        this.keepToolbarInBounds();
+      }, 100);
     });
     document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
