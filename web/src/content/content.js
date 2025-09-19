@@ -234,40 +234,90 @@ class ScratchCanvas {
     // Snap to edge and rotate if needed
     if (closestEdge) {
       this.toolbarPosition = closestEdge;
-
-      switch (closestEdge) {
-        case 'top':
-          this.toolbar.style.left = '50%';
-          this.toolbar.style.top = '20px';
-          this.toolbar.style.transform = 'translateX(-50%)';
-          this.toolbar.style.writingMode = 'horizontal-tb';
-          break;
-
-        case 'bottom':
-          this.toolbar.style.left = '50%';
-          this.toolbar.style.top = (windowHeight - rect.height - 20) + 'px';
-          this.toolbar.style.transform = 'translateX(-50%)';
-          this.toolbar.style.writingMode = 'horizontal-tb';
-          break;
-
-        case 'left':
-          this.toolbar.style.left = '20px';
-          this.toolbar.style.top = '50%';
-          this.toolbar.style.transform = 'translateY(-50%) rotate(-90deg)';
-          this.toolbar.style.transformOrigin = 'center center';
-          break;
-
-        case 'right':
-          this.toolbar.style.left = (windowWidth - rect.height - 20) + 'px';
-          this.toolbar.style.top = '50%';
-          this.toolbar.style.transform = 'translateY(-50%) rotate(90deg)';
-          this.toolbar.style.transformOrigin = 'center center';
-          break;
-      }
+      this.positionToolbarAtEdge(closestEdge);
 
       // Add snapped class for visual feedback
       this.toolbar.classList.add('snapped');
       setTimeout(() => this.toolbar.classList.remove('snapped'), 300);
+    }
+  }
+
+  positionToolbarAtEdge(edge) {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const rect = this.toolbar.getBoundingClientRect();
+
+    switch (edge) {
+      case 'top':
+        this.toolbar.style.left = '50%';
+        this.toolbar.style.top = '20px';
+        this.toolbar.style.transform = 'translateX(-50%)';
+        this.toolbar.style.writingMode = 'horizontal-tb';
+        break;
+
+      case 'bottom':
+        this.toolbar.style.left = '50%';
+        this.toolbar.style.top = (windowHeight - rect.height - 20) + 'px';
+        this.toolbar.style.transform = 'translateX(-50%)';
+        this.toolbar.style.writingMode = 'horizontal-tb';
+        break;
+
+      case 'left':
+        this.toolbar.style.left = '20px';
+        this.toolbar.style.top = '50%';
+        this.toolbar.style.transform = 'translateY(-50%) rotate(-90deg)';
+        this.toolbar.style.transformOrigin = 'center center';
+        break;
+
+      case 'right':
+        this.toolbar.style.left = (windowWidth - rect.height - 20) + 'px';
+        this.toolbar.style.top = '50%';
+        this.toolbar.style.transform = 'translateY(-50%) rotate(90deg)';
+        this.toolbar.style.transformOrigin = 'center center';
+        break;
+    }
+  }
+
+  keepToolbarInBounds() {
+    if (!this.toolbar || !this.isActive) return;
+
+    const rect = this.toolbar.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const margin = 20;
+
+    // If toolbar was snapped to an edge, reposition it
+    if (this.toolbarPosition) {
+      this.positionToolbarAtEdge(this.toolbarPosition);
+      return;
+    }
+
+    // Otherwise, make sure it's within bounds
+    let needsUpdate = false;
+    let newLeft = parseInt(this.toolbar.style.left);
+    let newTop = parseInt(this.toolbar.style.top);
+
+    // Check horizontal bounds
+    if (rect.right > windowWidth - margin) {
+      newLeft = windowWidth - rect.width - margin;
+      needsUpdate = true;
+    } else if (rect.left < margin) {
+      newLeft = margin;
+      needsUpdate = true;
+    }
+
+    // Check vertical bounds
+    if (rect.bottom > windowHeight - margin) {
+      newTop = windowHeight - rect.height - margin;
+      needsUpdate = true;
+    } else if (rect.top < margin) {
+      newTop = margin;
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      this.toolbar.style.left = newLeft + 'px';
+      this.toolbar.style.top = newTop + 'px';
     }
   }
 
@@ -337,7 +387,10 @@ class ScratchCanvas {
   }
 
   setupEventListeners() {
-    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('resize', () => {
+      this.resizeCanvas();
+      this.keepToolbarInBounds();
+    });
     document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
@@ -363,6 +416,8 @@ class ScratchCanvas {
     if (this.isActive) {
       this.setTool('pen'); // Set default tool
       this.updateCursor();
+      // Ensure toolbar is in bounds when first shown
+      this.keepToolbarInBounds();
     } else {
       this.canvas.style.cursor = 'default';
     }
