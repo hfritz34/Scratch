@@ -40,6 +40,7 @@ class ScratchCanvas {
   }
 
   createToolbar() {
+    console.log('Creating toolbar...');
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'scratch-toolbar';
     this.toolbar.innerHTML = `
@@ -79,6 +80,7 @@ class ScratchCanvas {
     `;
 
     document.body.appendChild(this.toolbar);
+    console.log('Toolbar appended to body:', this.toolbar);
     this.setupToolbarEvents();
   }
 
@@ -160,9 +162,14 @@ class ScratchCanvas {
 
   toggleDrawingMode() {
     this.isActive = !this.isActive;
+    console.log('Toggle drawing mode:', this.isActive);
     this.canvas.style.display = this.isActive ? 'block' : 'none';
     this.canvas.style.pointerEvents = this.isActive ? 'auto' : 'none';
     this.toolbar.style.display = this.isActive ? 'flex' : 'none';
+
+    if (this.isActive) {
+      this.setTool('pen'); // Set default tool
+    }
   }
 
   handleMouseDown(e) {
@@ -281,7 +288,7 @@ class ScratchCanvas {
 
   loadShortcuts() {
     return {
-      'Ctrl+Shift+D': 'toggle',
+      'Alt+D': 'toggle',
       'Ctrl+Shift+C': 'clear',
       'P': 'pen',
       'H': 'highlighter',
