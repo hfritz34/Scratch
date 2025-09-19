@@ -20,8 +20,25 @@ body {
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   padding: 20px;
-  text-align: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.logo-text {
+  text-align: left;
 }
 
 .popup-header h1 {
@@ -34,6 +51,7 @@ body {
 .popup-header p {
   font-size: 14px;
   opacity: 0.8;
+  margin: 0;
 }
 
 .popup-content {
