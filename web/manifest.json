@@ -22,7 +22,8 @@
     }
   ],
   "action": {
-    "default_title": "Scratch - Click to toggle drawing mode"
+    "default_title": "Scratch - Web Drawing Tool",
+    "default_popup": "popup.html"
   },
   "options_page": "src/options/options.html",
   "commands": {

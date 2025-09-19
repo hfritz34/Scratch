@@ -1,3 +1,4 @@
+// Action click now handled by popup, but keep for fallback
 chrome.action.onClicked.addListener((tab) => {
   chrome.tabs.sendMessage(tab.id, { action: 'toggleDrawing' });
 });

@@ -446,9 +446,16 @@ class ScratchCanvas {
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'toggleDrawing') {
         this.toggleDrawingMode();
+        // Send response with current state for popup
+        sendResponse({ isActive: this.isActive });
       } else if (request.action === 'clearCanvas') {
         this.clearCanvas();
+        sendResponse({ success: true });
+      } else if (request.action === 'getState') {
+        // Allow popup to query current state
+        sendResponse({ isActive: this.isActive });
       }
+      return true; // Keep message channel open for async response
     });
   }
 
@@ -483,25 +490,35 @@ class ScratchCanvas {
   handleMouseMove(e) {
     if (!this.isActive || !this.isDrawing) return;
 
-    this.ctx.beginPath();
-    this.ctx.moveTo(this.lastX, this.lastY);
-    this.ctx.lineTo(e.pageX, e.pageY);
-
-    if (this.currentTool === 'pen') {
-      this.ctx.strokeStyle = this.currentColor;
-      this.ctx.lineWidth = 2;
-      this.ctx.globalCompositeOperation = 'source-over';
-    } else if (this.currentTool === 'highlighter') {
-      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.3);
+    if (this.currentTool === 'highlighter') {
+      // Use multiply blending for proper highlighter effect
+      this.ctx.globalCompositeOperation = 'multiply';
+      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.4);
       this.ctx.lineWidth = 15;
-      this.ctx.globalCompositeOperation = 'source-over';
-    } else if (this.currentTool === 'eraser') {
-      this.ctx.globalCompositeOperation = 'destination-out';
-      this.ctx.lineWidth = 20;
-    }
+      this.ctx.lineCap = 'round';
+      this.ctx.lineJoin = 'round';
 
-    this.ctx.lineCap = 'round';
-    this.ctx.stroke();
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastX, this.lastY);
+      this.ctx.lineTo(e.pageX, e.pageY);
+      this.ctx.stroke();
+    } else {
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.lastX, this.lastY);
+      this.ctx.lineTo(e.pageX, e.pageY);
+
+      if (this.currentTool === 'pen') {
+        this.ctx.strokeStyle = this.currentColor;
+        this.ctx.lineWidth = 2;
+        this.ctx.globalCompositeOperation = 'source-over';
+      } else if (this.currentTool === 'eraser') {
+        this.ctx.globalCompositeOperation = 'destination-out';
+        this.ctx.lineWidth = 20;
+      }
+
+      this.ctx.lineCap = 'round';
+      this.ctx.stroke();
+    }
 
     this.lastX = e.pageX;
     this.lastY = e.pageY;
