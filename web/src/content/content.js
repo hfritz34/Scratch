@@ -18,6 +18,8 @@ class ScratchCanvas {
     this.lastX = 0;
     this.lastY = 0;
     this.shortcuts = this.loadShortcuts();
+    this.strokes = []; // Track all strokes for whole eraser functionality
+    this.currentStroke = null;
     this.init();
   }
 
@@ -60,18 +62,26 @@ class ScratchCanvas {
   updateCanvasSize() {
     const body = document.body;
     const html = document.documentElement;
+
+    // Get the full document dimensions including scrollable area
     const height = Math.max(
       body.scrollHeight, body.offsetHeight,
-      html.clientHeight, html.scrollHeight, html.offsetHeight
+      html.clientHeight, html.scrollHeight, html.offsetHeight,
+      window.innerHeight + window.pageYOffset
     );
     const width = Math.max(
       body.scrollWidth, body.offsetWidth,
-      html.clientWidth, html.scrollWidth, html.offsetWidth
+      html.clientWidth, html.scrollWidth, html.offsetWidth,
+      window.innerWidth + window.pageXOffset
     );
 
+    // Set canvas size to cover entire document
     this.canvas.width = width;
     this.canvas.height = height;
+    this.canvas.style.width = width + 'px';
     this.canvas.style.height = height + 'px';
+
+    console.log('Canvas size updated:', width, 'x', height);
   }
 
   createToolbar() {
@@ -527,6 +537,8 @@ class ScratchCanvas {
 
   setupEventListeners() {
     let resizeTimeout;
+    let scrollTimeout;
+
     window.addEventListener('resize', () => {
       this.resizeCanvas();
 
@@ -536,6 +548,15 @@ class ScratchCanvas {
         this.keepToolbarInBounds();
       }, 100);
     });
+
+    // Listen for scroll events to update canvas size for long pages
+    window.addEventListener('scroll', () => {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        this.updateCanvasSize();
+      }, 100);
+    }, { passive: true });
+
     document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
@@ -581,13 +602,44 @@ class ScratchCanvas {
     // Prevent drawing if clicking on toolbar or dragging it
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
+    if (this.currentTool === 'eraser') {
+      // Whole eraser: detect and remove strokes at click point
+      this.wholeErase(e.pageX, e.pageY);
+      return;
+    }
+
     this.isDrawing = true;
     this.lastX = e.pageX;
     this.lastY = e.pageY;
+
+    // Start new stroke tracking
+    this.currentStroke = {
+      tool: this.currentTool,
+      color: this.currentColor,
+      size: this.toolSizes[this.currentTool],
+      points: [{ x: e.pageX, y: e.pageY }],
+      bounds: {
+        minX: e.pageX,
+        maxX: e.pageX,
+        minY: e.pageY,
+        maxY: e.pageY
+      }
+    };
   }
 
   handleMouseMove(e) {
     if (!this.isActive || !this.isDrawing) return;
+
+    // Add point to current stroke
+    if (this.currentStroke) {
+      this.currentStroke.points.push({ x: e.pageX, y: e.pageY });
+
+      // Update stroke bounds
+      this.currentStroke.bounds.minX = Math.min(this.currentStroke.bounds.minX, e.pageX);
+      this.currentStroke.bounds.maxX = Math.max(this.currentStroke.bounds.maxX, e.pageX);
+      this.currentStroke.bounds.minY = Math.min(this.currentStroke.bounds.minY, e.pageY);
+      this.currentStroke.bounds.maxY = Math.max(this.currentStroke.bounds.maxY, e.pageY);
+    }
 
     if (this.currentTool === 'highlighter') {
       // Use multiply blending for proper highlighter effect
@@ -601,20 +653,14 @@ class ScratchCanvas {
       this.ctx.moveTo(this.lastX, this.lastY);
       this.ctx.lineTo(e.pageX, e.pageY);
       this.ctx.stroke();
-    } else {
+    } else if (this.currentTool === 'pen') {
       this.ctx.beginPath();
       this.ctx.moveTo(this.lastX, this.lastY);
       this.ctx.lineTo(e.pageX, e.pageY);
 
-      if (this.currentTool === 'pen') {
-        this.ctx.strokeStyle = this.currentColor;
-        this.ctx.lineWidth = this.toolSizes.pen;
-        this.ctx.globalCompositeOperation = 'source-over';
-      } else if (this.currentTool === 'eraser') {
-        this.ctx.globalCompositeOperation = 'destination-out';
-        this.ctx.lineWidth = this.toolSizes.eraser;
-      }
-
+      this.ctx.strokeStyle = this.currentColor;
+      this.ctx.lineWidth = this.toolSizes.pen;
+      this.ctx.globalCompositeOperation = 'source-over';
       this.ctx.lineCap = 'round';
       this.ctx.stroke();
     }
@@ -624,6 +670,11 @@ class ScratchCanvas {
   }
 
   handleMouseUp(e) {
+    if (this.isDrawing && this.currentStroke) {
+      // Save completed stroke
+      this.strokes.push(this.currentStroke);
+      this.currentStroke = null;
+    }
     this.isDrawing = false;
   }
 
@@ -712,14 +763,122 @@ class ScratchCanvas {
     }
   }
 
+  wholeErase(x, y) {
+    // Find strokes that contain the click point
+    const strokesToRemove = [];
+
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+
+      // Quick bounds check first
+      const padding = stroke.size / 2 + 5; // Add padding for easier selection
+      if (x >= stroke.bounds.minX - padding && x <= stroke.bounds.maxX + padding &&
+          y >= stroke.bounds.minY - padding && y <= stroke.bounds.maxY + padding) {
+
+        // Check if point is near any line segment in the stroke
+        if (this.isPointNearStroke(x, y, stroke)) {
+          strokesToRemove.push(i);
+        }
+      }
+    }
+
+    // Remove strokes (in reverse order to maintain indices)
+    for (let i = strokesToRemove.length - 1; i >= 0; i--) {
+      this.strokes.splice(strokesToRemove[i], 1);
+    }
+
+    // Redraw canvas if strokes were removed
+    if (strokesToRemove.length > 0) {
+      this.redrawCanvas();
+    }
+  }
+
+  isPointNearStroke(x, y, stroke) {
+    const threshold = stroke.size / 2 + 8; // Tolerance for click detection
+
+    for (let i = 0; i < stroke.points.length - 1; i++) {
+      const p1 = stroke.points[i];
+      const p2 = stroke.points[i + 1];
+
+      const distance = this.distanceToLineSegment(x, y, p1.x, p1.y, p2.x, p2.y);
+      if (distance <= threshold) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  distanceToLineSegment(px, py, x1, y1, x2, y2) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+
+    if (lenSq === 0) {
+      // Point case
+      return Math.sqrt(A * A + B * B);
+    }
+
+    let param = dot / lenSq;
+    param = Math.max(0, Math.min(1, param));
+
+    const xx = x1 + param * C;
+    const yy = y1 + param * D;
+
+    const dx = px - xx;
+    const dy = py - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  redrawCanvas() {
+    // Clear canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Redraw all remaining strokes
+    for (const stroke of this.strokes) {
+      this.drawStroke(stroke);
+    }
+  }
+
+  drawStroke(stroke) {
+    if (stroke.points.length < 2) return;
+
+    if (stroke.tool === 'highlighter') {
+      this.ctx.globalCompositeOperation = 'multiply';
+      this.ctx.strokeStyle = this.hexToRgba(stroke.color, 0.4);
+    } else {
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.strokeStyle = stroke.color;
+    }
+
+    this.ctx.lineWidth = stroke.size;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+    for (let i = 1; i < stroke.points.length; i++) {
+      this.ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    }
+
+    this.ctx.stroke();
+  }
+
   clearCanvas() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.strokes = []; // Clear stroke history
   }
 
   resizeCanvas() {
-    const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+    // Store strokes and redraw instead of using imageData
+    const currentStrokes = [...this.strokes];
     this.updateCanvasSize();
-    this.ctx.putImageData(imageData, 0, 0);
+    this.strokes = currentStrokes;
+    this.redrawCanvas();
   }
 
   loadShortcuts() {
