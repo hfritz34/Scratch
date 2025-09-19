@@ -5,9 +5,16 @@ class ScratchCanvas {
     this.isDraggingToolbar = false;
     this.currentTool = 'pen';
     this.currentColor = '#000000';
+    this.toolSizes = {
+      pen: 2,
+      highlighter: 15,
+      eraser: 20
+    };
     this.canvas = null;
     this.ctx = null;
     this.toolbar = null;
+    this.sizeSlider = null;
+    this.sliderTimeout = null;
     this.lastX = 0;
     this.lastY = 0;
     this.shortcuts = this.loadShortcuts();
@@ -109,16 +116,55 @@ class ScratchCanvas {
 
     document.body.appendChild(this.toolbar);
     console.log('Toolbar appended to body:', this.toolbar);
+    this.createSizeSlider();
     this.setupToolbarEvents();
     this.setupToolbarDrag();
   }
 
+  createSizeSlider() {
+    this.sizeSlider = document.createElement('div');
+    this.sizeSlider.id = 'size-slider';
+    this.sizeSlider.innerHTML = `
+      <div class="slider-container">
+        <span class="slider-label">Size</span>
+        <input type="range" class="size-range" min="1" max="50" value="2">
+        <span class="slider-value">2px</span>
+      </div>
+    `;
+    this.sizeSlider.style.display = 'none';
+    document.body.appendChild(this.sizeSlider);
+
+    const slider = this.sizeSlider.querySelector('.size-range');
+    const valueDisplay = this.sizeSlider.querySelector('.slider-value');
+
+    slider.addEventListener('input', (e) => {
+      const size = parseInt(e.target.value);
+      this.toolSizes[this.currentTool] = size;
+      valueDisplay.textContent = size + 'px';
+      this.resetSliderTimeout();
+    });
+
+    // Hide slider when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#size-slider') && !e.target.closest('.tool-btn')) {
+        this.hideSizeSlider();
+      }
+    });
+  }
+
   setupToolbarEvents() {
-    // Tool selection
+    // Tool selection with size slider
     this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const tool = e.currentTarget.dataset.tool;
-        this.setTool(tool);
+
+        // If clicking the same tool, show size slider
+        if (tool === this.currentTool && ['pen', 'highlighter', 'eraser'].includes(tool)) {
+          this.showSizeSlider(e.currentTarget);
+        } else {
+          this.setTool(tool);
+          this.hideSizeSlider();
+        }
       });
     });
 
@@ -436,6 +482,49 @@ class ScratchCanvas {
     this.updateCursor();
   }
 
+  showSizeSlider(toolButton) {
+    const rect = toolButton.getBoundingClientRect();
+    const toolbarRect = this.toolbar.getBoundingClientRect();
+
+    // Update slider value for current tool
+    const slider = this.sizeSlider.querySelector('.size-range');
+    const valueDisplay = this.sizeSlider.querySelector('.slider-value');
+    const currentSize = this.toolSizes[this.currentTool];
+
+    slider.value = currentSize;
+    valueDisplay.textContent = currentSize + 'px';
+
+    // Set max value based on tool
+    const maxValues = { pen: 20, highlighter: 40, eraser: 50 };
+    slider.max = maxValues[this.currentTool] || 20;
+
+    // Position slider near the tool button
+    this.sizeSlider.style.position = 'fixed';
+    this.sizeSlider.style.left = rect.left + 'px';
+    this.sizeSlider.style.top = (rect.bottom + 8) + 'px';
+    this.sizeSlider.style.display = 'block';
+    this.sizeSlider.style.zIndex = '1000000';
+
+    this.resetSliderTimeout();
+  }
+
+  hideSizeSlider() {
+    this.sizeSlider.style.display = 'none';
+    if (this.sliderTimeout) {
+      clearTimeout(this.sliderTimeout);
+      this.sliderTimeout = null;
+    }
+  }
+
+  resetSliderTimeout() {
+    if (this.sliderTimeout) {
+      clearTimeout(this.sliderTimeout);
+    }
+    this.sliderTimeout = setTimeout(() => {
+      this.hideSizeSlider();
+    }, 2000); // Hide after 2 seconds of inactivity
+  }
+
   setupEventListeners() {
     let resizeTimeout;
     window.addEventListener('resize', () => {
@@ -504,7 +593,7 @@ class ScratchCanvas {
       // Use multiply blending for proper highlighter effect
       this.ctx.globalCompositeOperation = 'multiply';
       this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.4);
-      this.ctx.lineWidth = 15;
+      this.ctx.lineWidth = this.toolSizes.highlighter;
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
 
@@ -519,11 +608,11 @@ class ScratchCanvas {
 
       if (this.currentTool === 'pen') {
         this.ctx.strokeStyle = this.currentColor;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = this.toolSizes.pen;
         this.ctx.globalCompositeOperation = 'source-over';
       } else if (this.currentTool === 'eraser') {
         this.ctx.globalCompositeOperation = 'destination-out';
-        this.ctx.lineWidth = 20;
+        this.ctx.lineWidth = this.toolSizes.eraser;
       }
 
       this.ctx.lineCap = 'round';
