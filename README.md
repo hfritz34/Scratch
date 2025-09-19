@@ -18,13 +18,15 @@ A Chrome extension for drawing on any webpage with customizable shortcuts.
 
 ## Default Shortcuts
 
-- `Ctrl+Shift+D` - Toggle drawing mode
+- `D` - Toggle drawing mode (when not in input field)
+- `Escape` - Exit drawing mode
 - `Ctrl+Shift+C` - Clear canvas
-- `P` - Select pen tool
-- `H` - Select highlighter tool
-- `E` - Select eraser tool
+- `P` - Select pen tool (when in drawing mode)
+- `H` - Select highlighter tool (when in drawing mode)
+- `E` - Select eraser tool (when in drawing mode)
 - Right-click (hold) - Temporary eraser
 - Double right-click - Clear all drawings
+- Click extension icon - Toggle drawing mode
 
 ## Development
 

@@ -14,6 +14,17 @@ class ScratchCanvas {
   }
 
   init() {
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        this.initializeExtension();
+      });
+    } else {
+      this.initializeExtension();
+    }
+  }
+
+  initializeExtension() {
     this.createCanvas();
     this.createToolbar();
     this.setupEventListeners();
@@ -23,20 +34,36 @@ class ScratchCanvas {
   createCanvas() {
     this.canvas = document.createElement('canvas');
     this.canvas.id = 'scratch-canvas';
-    this.canvas.style.position = 'fixed';
+    this.canvas.style.position = 'absolute';
     this.canvas.style.top = '0';
     this.canvas.style.left = '0';
     this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
     this.canvas.style.pointerEvents = 'none';
     this.canvas.style.zIndex = '999998';
     this.canvas.style.display = 'none';
 
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    // Set canvas size to full document size
+    this.updateCanvasSize();
 
     document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d');
+  }
+
+  updateCanvasSize() {
+    const body = document.body;
+    const html = document.documentElement;
+    const height = Math.max(
+      body.scrollHeight, body.offsetHeight,
+      html.clientHeight, html.scrollHeight, html.offsetHeight
+    );
+    const width = Math.max(
+      body.scrollWidth, body.offsetWidth,
+      html.clientWidth, html.scrollWidth, html.offsetWidth
+    );
+
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.canvas.style.height = height + 'px';
   }
 
   createToolbar() {
@@ -192,7 +219,6 @@ class ScratchCanvas {
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
     document.addEventListener('contextmenu', (e) => this.handleRightClick(e));
     document.addEventListener('keydown', (e) => this.handleKeyPress(e));
-    document.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'toggleDrawing') {
@@ -219,8 +245,8 @@ class ScratchCanvas {
     if (!this.isActive) return;
 
     this.isDrawing = true;
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
+    this.lastX = e.pageX;
+    this.lastY = e.pageY;
   }
 
   handleMouseMove(e) {
@@ -228,7 +254,7 @@ class ScratchCanvas {
 
     this.ctx.beginPath();
     this.ctx.moveTo(this.lastX, this.lastY);
-    this.ctx.lineTo(e.clientX, e.clientY);
+    this.ctx.lineTo(e.pageX, e.pageY);
 
     if (this.currentTool === 'pen') {
       this.ctx.strokeStyle = this.currentColor;
@@ -246,8 +272,8 @@ class ScratchCanvas {
     this.ctx.lineCap = 'round';
     this.ctx.stroke();
 
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
+    this.lastX = e.pageX;
+    this.lastY = e.pageY;
   }
 
   handleMouseUp(e) {
@@ -277,6 +303,20 @@ class ScratchCanvas {
   }
 
   handleKeyPress(e) {
+    // Ignore if user is typing in an input field
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+      return;
+    }
+
+    // Handle 'D' key to toggle drawing mode
+    if (e.key === 'd' || e.key === 'D') {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        this.toggleDrawingMode();
+        return;
+      }
+    }
+
     // Handle Escape key to exit drawing mode
     if (e.key === 'Escape' && this.isActive) {
       e.preventDefault();
@@ -284,7 +324,7 @@ class ScratchCanvas {
       return;
     }
 
-    if (!this.shortcuts) return;
+    if (!this.shortcuts || !this.isActive) return;
 
     const key = this.getKeyString(e);
     const action = this.shortcuts[key];
@@ -293,19 +333,6 @@ class ScratchCanvas {
       e.preventDefault();
       this.executeAction(action);
     }
-  }
-
-  handleDoubleClick(e) {
-    // Prevent toolbar clicks from triggering toggle
-    if (e.target.closest('#scratch-toolbar')) return;
-
-    // Prevent if currently drawing
-    if (this.isDrawing) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    this.toggleDrawingMode();
-    console.log('Double-click toggle:', this.isActive);
   }
 
   getKeyString(e) {
@@ -344,8 +371,7 @@ class ScratchCanvas {
 
   resizeCanvas() {
     const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    this.updateCanvasSize();
     this.ctx.putImageData(imageData, 0, 0);
   }
 
