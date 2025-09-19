@@ -6,8 +6,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Check current drawing state
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    // Query content script for current state (we'll implement this)
-    updateToggleButton(false); // Default to inactive
+    if (tabs[0]) {
+      chrome.tabs.sendMessage(tabs[0].id, { action: 'getState' }, (response) => {
+        if (response && response.isActive !== undefined) {
+          updateToggleButton(response.isActive);
+        } else {
+          updateToggleButton(false); // Default to inactive if no response
+        }
+      });
+    }
   });
 
   // Toggle drawing mode

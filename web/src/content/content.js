@@ -181,8 +181,18 @@ class ScratchCanvas {
       const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
 
-      const newLeft = startLeft + deltaX;
-      const newTop = startTop + deltaY;
+      let newLeft = startLeft + deltaX;
+      let newTop = startTop + deltaY;
+
+      // Get toolbar dimensions
+      const rect = this.toolbar.getBoundingClientRect();
+      const windowWidth = window.innerWidth;
+      const windowHeight = window.innerHeight;
+      const margin = 10;
+
+      // Constrain to window bounds during drag
+      newLeft = Math.max(margin, Math.min(newLeft, windowWidth - rect.width - margin));
+      newTop = Math.max(margin, Math.min(newTop, windowHeight - rect.height - margin));
 
       this.toolbar.style.left = newLeft + 'px';
       this.toolbar.style.top = newTop + 'px';
