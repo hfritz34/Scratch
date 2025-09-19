@@ -192,7 +192,39 @@ class ScratchCanvas {
     this.toolbar.querySelector(`[data-tool="${tool}"]`).classList.add('active');
 
     // Update cursor
-    this.canvas.className = `${tool}-cursor`;
+    this.updateCursor();
+  }
+
+  updateCursor() {
+    if (!this.isActive) return;
+
+    const color = this.currentColor || '#000000';
+    let cursorSvg = '';
+
+    if (this.currentTool === 'pen') {
+      // Pen cursor with color dot
+      cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="8" fill="${color}" stroke="white" stroke-width="2"/>
+        <circle cx="16" cy="16" r="2" fill="white"/>
+      </svg>`;
+    } else if (this.currentTool === 'highlighter') {
+      // Highlighter cursor with transparent color
+      const rgba = this.hexToRgba(color, 0.3);
+      cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <rect x="8" y="8" width="16" height="16" fill="${rgba}" stroke="white" stroke-width="2"/>
+        <circle cx="16" cy="16" r="2" fill="black"/>
+      </svg>`;
+    } else if (this.currentTool === 'eraser') {
+      // Eraser cursor
+      cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="10" fill="none" stroke="red" stroke-width="3"/>
+        <line x1="10" y1="16" x2="22" y2="16" stroke="red" stroke-width="2"/>
+        <line x1="16" y1="10" x2="16" y2="22" stroke="red" stroke-width="2"/>
+      </svg>`;
+    }
+
+    const encodedSvg = encodeURIComponent(cursorSvg);
+    this.canvas.style.cursor = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, crosshair`;
   }
 
   setColor(color) {
@@ -210,6 +242,9 @@ class ScratchCanvas {
 
     // Update custom color picker
     this.toolbar.querySelector('#custom-color').value = color;
+
+    // Update cursor to match new color
+    this.updateCursor();
   }
 
   setupEventListeners() {
@@ -238,6 +273,9 @@ class ScratchCanvas {
 
     if (this.isActive) {
       this.setTool('pen'); // Set default tool
+      this.updateCursor();
+    } else {
+      this.canvas.style.cursor = 'default';
     }
   }
 
