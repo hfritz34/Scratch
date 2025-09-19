@@ -20,6 +20,8 @@ class ScratchCanvas {
     this.shortcuts = this.loadShortcuts();
     this.strokes = []; // Track all strokes for whole eraser functionality
     this.currentStroke = null;
+    this.palettes = this.initializePalettes();
+    this.currentPalette = 'simple';
     this.init();
   }
 
@@ -88,6 +90,11 @@ class ScratchCanvas {
     console.log('Creating toolbar...');
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'scratch-toolbar';
+    const colors = this.getCurrentPaletteColors();
+    const colorSwatches = colors.map((color, index) =>
+      `<div class="color-swatch ${index === 0 ? 'active' : ''}" data-color="${color}" style="background-color: ${color};" title="Color ${index + 1}"></div>`
+    ).join('');
+
     this.toolbar.innerHTML = `
       <div class="toolbar-drag-handle" title="Drag to move"></div>
       <button class="tool-btn active" data-tool="pen" title="Pen (P)">
@@ -106,11 +113,13 @@ class ScratchCanvas {
         </svg>
       </button>
       <div class="toolbar-divider"></div>
-      <div class="color-swatch active" data-color="#000000" style="background-color: #000000;" title="Black"></div>
-      <div class="color-swatch" data-color="#FF0000" style="background-color: #FF0000;" title="Red"></div>
-      <div class="color-swatch" data-color="#0000FF" style="background-color: #0000FF;" title="Blue"></div>
-      <input type="color" id="custom-color" value="#000000" title="Custom color">
+      ${colorSwatches}
       <div class="toolbar-divider"></div>
+      <button class="palette-btn" title="Change palette">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22C13.11,22 14,21.11 14,20V19.6C14,19.27 14.27,19 14.6,19H16A3,3 0 0,0 19,16V13A10,10 0 0,0 12,2M6.5,9A1.5,1.5 0 0,1 8,10.5A1.5,1.5 0 0,1 6.5,12A1.5,1.5 0 0,1 5,10.5A1.5,1.5 0 0,1 6.5,9M9.5,5.5A1.5,1.5 0 0,1 11,7A1.5,1.5 0 0,1 9.5,8.5A1.5,1.5 0 0,1 8,7A1.5,1.5 0 0,1 9.5,5.5M14.5,5.5A1.5,1.5 0 0,1 16,7A1.5,1.5 0 0,1 14.5,8.5A1.5,1.5 0 0,1 13,7A1.5,1.5 0 0,1 14.5,5.5M17.5,9A1.5,1.5 0 0,1 19,10.5A1.5,1.5 0 0,1 17.5,12A1.5,1.5 0 0,1 16,10.5A1.5,1.5 0 0,1 17.5,9Z"/>
+        </svg>
+      </button>
       <button class="clear-btn" title="Clear all (Ctrl+Shift+C)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
@@ -186,11 +195,14 @@ class ScratchCanvas {
       });
     });
 
-    // Custom color picker
-    const customColor = this.toolbar.querySelector('#custom-color');
-    customColor.addEventListener('change', (e) => {
-      this.setColor(e.target.value);
-    });
+    // Palette button
+    const paletteBtn = this.toolbar.querySelector('.palette-btn');
+    if (paletteBtn) {
+      paletteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.switchPalette();
+      });
+    }
 
     // Clear button
     this.toolbar.querySelector('.clear-btn').addEventListener('click', () => {
@@ -881,6 +893,23 @@ class ScratchCanvas {
     this.redrawCanvas();
   }
 
+  initializePalettes() {
+    return {
+      simple: ['#000000', '#FF0000', '#0000FF', '#00FF00', '#FFFF00'],
+      blu: ['#001F3F', '#0074D9', '#7FDBFF', '#39CCCC', '#2ECC40'],
+      cambridge: ['#2E4057', '#048A81', '#54C6EB', '#F18F01', '#C73E1D'],
+      dream: ['#F72585', '#B5179E', '#7209B7', '#480CA8', '#3A0CA3'],
+      eclipse: ['#011627', '#FDFFFC', '#2EC4B6', '#E71D36', '#FF9F1C'],
+      fairytale: ['#F72585', '#4CC9F0', '#7209B7', '#560BAD', '#480CA8'],
+      go: ['#FF6B35', '#F7931E', '#FFD23F', '#06FFA5', '#118AB2'],
+      incorrect: ['#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'],
+      metropark: ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51'],
+      rebecca: ['#2F1B69', '#A288A6', '#FFFFFF', '#F0E68C', '#FF6B6B'],
+      remember: ['#8D5524', '#C68642', '#E0AC69', '#F1C27D', '#FFDBAC'],
+      stung: ['#F72585', '#B5179E', '#7209B7', '#480CA8', '#3A0CA3']
+    };
+  }
+
   loadShortcuts() {
     return {
       'Ctrl+Shift+C': 'clear',
@@ -888,6 +917,38 @@ class ScratchCanvas {
       'H': 'highlighter',
       'E': 'eraser'
     };
+  }
+
+  getCurrentPaletteColors() {
+    return this.palettes[this.currentPalette] || this.palettes.simple;
+  }
+
+  switchPalette() {
+    const paletteNames = Object.keys(this.palettes);
+    const currentIndex = paletteNames.indexOf(this.currentPalette);
+    const nextIndex = (currentIndex + 1) % paletteNames.length;
+    this.currentPalette = paletteNames[nextIndex];
+    this.updateToolbarColors();
+  }
+
+  updateToolbarColors() {
+    const colors = this.getCurrentPaletteColors();
+    const swatches = this.toolbar.querySelectorAll('.color-swatch');
+
+    swatches.forEach((swatch, index) => {
+      if (index < colors.length) {
+        swatch.style.backgroundColor = colors[index];
+        swatch.setAttribute('data-color', colors[index]);
+        swatch.setAttribute('title', `Color ${index + 1}`);
+      }
+    });
+
+    // Update current color to first color of new palette
+    this.currentColor = colors[0];
+    swatches[0].classList.add('active');
+    for (let i = 1; i < swatches.length; i++) {
+      swatches[i].classList.remove('active');
+    }
   }
 
   hexToRgba(hex, alpha) {
