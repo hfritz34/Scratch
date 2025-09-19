@@ -959,9 +959,25 @@ class ScratchCanvas {
   }
 
   loadSettings() {
-    chrome.storage.sync.get(['shortcuts'], (result) => {
+    chrome.storage.sync.get(['shortcuts', 'selectedPalette'], (result) => {
       if (result.shortcuts) {
         this.shortcuts = result.shortcuts;
+      }
+      if (result.selectedPalette) {
+        this.currentPalette = result.selectedPalette;
+        if (this.toolbar) {
+          this.updateToolbarColors();
+        }
+      }
+    });
+
+    // Listen for palette updates from options page
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === 'updatePalette') {
+        this.currentPalette = request.palette;
+        if (this.toolbar) {
+          this.updateToolbarColors();
+        }
       }
     });
   }
