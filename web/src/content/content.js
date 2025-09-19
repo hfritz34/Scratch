@@ -3,8 +3,10 @@ class ScratchCanvas {
     this.isDrawing = false;
     this.isActive = false;
     this.currentTool = 'pen';
+    this.currentColor = '#000000';
     this.canvas = null;
     this.ctx = null;
+    this.toolbar = null;
     this.lastX = 0;
     this.lastY = 0;
     this.shortcuts = this.loadShortcuts();
@@ -13,6 +15,7 @@ class ScratchCanvas {
 
   init() {
     this.createCanvas();
+    this.createToolbar();
     this.setupEventListeners();
     this.loadSettings();
   }
@@ -26,7 +29,7 @@ class ScratchCanvas {
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.canvas.style.pointerEvents = 'none';
-    this.canvas.style.zIndex = '999999';
+    this.canvas.style.zIndex = '999998';
     this.canvas.style.display = 'none';
 
     this.canvas.width = window.innerWidth;
@@ -34,6 +37,108 @@ class ScratchCanvas {
 
     document.body.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d');
+  }
+
+  createToolbar() {
+    this.toolbar = document.createElement('div');
+    this.toolbar.id = 'scratch-toolbar';
+    this.toolbar.innerHTML = `
+      <div class="toolbar-tools">
+        <button class="tool-btn active" data-tool="pen" title="Pen (P)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="highlighter" title="Highlighter (H)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11 9h5.5L11 3.5V9zM7.5 6.5C6.12 6.5 5 7.62 5 9v10.5c0 1.38 1.12 2.5 2.5 2.5h9c1.38 0 2.5-1.12 2.5-2.5V9H13V3.5h-3c-1.38 0-2.5 1.12-2.5 2.5V6.5z"/>
+          </svg>
+        </button>
+        <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-6.36-6.36-3.54 3.54c-.78.78-.78 2.05 0 2.82z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="toolbar-colors">
+        <div class="color-picker">
+          <div class="color-swatch active" data-color="#000000" style="background-color: #000000;" title="Black"></div>
+          <div class="color-swatch" data-color="#FF0000" style="background-color: #FF0000;" title="Red"></div>
+          <div class="color-swatch" data-color="#00FF00" style="background-color: #00FF00;" title="Green"></div>
+          <div class="color-swatch" data-color="#0000FF" style="background-color: #0000FF;" title="Blue"></div>
+          <div class="color-swatch" data-color="#FFFF00" style="background-color: #FFFF00;" title="Yellow"></div>
+          <div class="color-swatch" data-color="#FF00FF" style="background-color: #FF00FF;" title="Magenta"></div>
+          <input type="color" id="custom-color" value="#000000" title="Custom color">
+        </div>
+      </div>
+      <button class="clear-btn" title="Clear all (Ctrl+Shift+C)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+        </svg>
+      </button>
+    `;
+
+    document.body.appendChild(this.toolbar);
+    this.setupToolbarEvents();
+  }
+
+  setupToolbarEvents() {
+    // Tool selection
+    this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tool = e.currentTarget.dataset.tool;
+        this.setTool(tool);
+      });
+    });
+
+    // Color selection
+    this.toolbar.querySelectorAll('.color-swatch').forEach(swatch => {
+      swatch.addEventListener('click', (e) => {
+        const color = e.currentTarget.dataset.color;
+        this.setColor(color);
+      });
+    });
+
+    // Custom color picker
+    const customColor = this.toolbar.querySelector('#custom-color');
+    customColor.addEventListener('change', (e) => {
+      this.setColor(e.target.value);
+    });
+
+    // Clear button
+    this.toolbar.querySelector('.clear-btn').addEventListener('click', () => {
+      this.clearCanvas();
+    });
+  }
+
+  setTool(tool) {
+    this.currentTool = tool;
+
+    // Update active tool button
+    this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    this.toolbar.querySelector(`[data-tool="${tool}"]`).classList.add('active');
+
+    // Update cursor
+    this.canvas.className = `${tool}-cursor`;
+  }
+
+  setColor(color) {
+    this.currentColor = color;
+
+    // Update active color swatch
+    this.toolbar.querySelectorAll('.color-swatch').forEach(swatch => {
+      swatch.classList.remove('active');
+    });
+
+    const swatch = this.toolbar.querySelector(`[data-color="${color}"]`);
+    if (swatch) {
+      swatch.classList.add('active');
+    }
+
+    // Update custom color picker
+    this.toolbar.querySelector('#custom-color').value = color;
   }
 
   setupEventListeners() {
@@ -57,6 +162,7 @@ class ScratchCanvas {
     this.isActive = !this.isActive;
     this.canvas.style.display = this.isActive ? 'block' : 'none';
     this.canvas.style.pointerEvents = this.isActive ? 'auto' : 'none';
+    this.toolbar.style.display = this.isActive ? 'flex' : 'none';
   }
 
   handleMouseDown(e) {
@@ -75,11 +181,11 @@ class ScratchCanvas {
     this.ctx.lineTo(e.clientX, e.clientY);
 
     if (this.currentTool === 'pen') {
-      this.ctx.strokeStyle = '#000000';
+      this.ctx.strokeStyle = this.currentColor;
       this.ctx.lineWidth = 2;
       this.ctx.globalCompositeOperation = 'source-over';
     } else if (this.currentTool === 'highlighter') {
-      this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.3)';
+      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.3);
       this.ctx.lineWidth = 15;
       this.ctx.globalCompositeOperation = 'source-over';
     } else if (this.currentTool === 'eraser') {
@@ -181,6 +287,13 @@ class ScratchCanvas {
       'H': 'highlighter',
       'E': 'eraser'
     };
+  }
+
+  hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
   loadSettings() {

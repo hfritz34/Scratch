@@ -4,34 +4,139 @@
 
 #scratch-toolbar {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  padding: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 1000000;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   display: none;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+  z-index: 999999;
+  user-select: none;
 }
 
-.scratch-tool-button {
-  width: 40px;
-  height: 40px;
-  margin: 5px;
-  border: 2px solid #ddd;
-  border-radius: 4px;
-  background: white;
+.toolbar-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tool-btn {
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
   cursor: pointer;
-  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.scratch-tool-button:hover {
-  border-color: #007bff;
+.tool-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
   transform: scale(1.05);
 }
 
-.scratch-tool-button.active {
-  background: #007bff;
-  border-color: #007bff;
-  color: white;
+.tool-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.tool-btn svg {
+  pointer-events: none;
+}
+
+.toolbar-colors {
+  display: flex;
+  justify-content: center;
+}
+
+.color-picker {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+
+.color-swatch.active {
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+  transform: scale(1.05);
+}
+
+#custom-color {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+#custom-color::-webkit-color-swatch {
+  border-radius: 50%;
+  border: none;
+}
+
+#custom-color::-webkit-color-swatch-wrapper {
+  border-radius: 50%;
+  padding: 0;
+}
+
+.clear-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+}
+
+.clear-btn:hover {
+  background: rgba(255, 0, 0, 0.2);
+  transform: scale(1.05);
+}
+
+/* Pen cursor for drawing mode */
+#scratch-canvas.pen-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" fill="black"/></svg>') 8 8, crosshair;
+}
+
+#scratch-canvas.highlighter-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect x="6" y="6" width="8" height="8" fill="yellow" opacity="0.5"/></svg>') 10 10, crosshair;
+}
+
+#scratch-canvas.eraser-cursor {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="red" stroke-width="2"/></svg>') 10 10, crosshair;
 }
