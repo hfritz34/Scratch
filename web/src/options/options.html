@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scratch - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Scratch Settings</h1>
+
+    <section class="settings-section">
+      <h2>Keyboard Shortcuts</h2>
+      <div id="shortcuts-list"></div>
+      <button id="add-shortcut" class="btn btn-primary">Add New Shortcut</button>
+    </section>
+
+    <section class="settings-section">
+      <h2>Mouse Actions</h2>
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="right-click-eraser" checked>
+          Right-click to use eraser (hold)
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="double-right-clear" checked>
+          Double right-click to clear canvas
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>
+          <input type="checkbox" id="middle-click-toggle" checked>
+          Middle-click to toggle drawing mode
+        </label>
+      </div>
+    </section>
+
+    <section class="settings-section">
+      <h2>Drawing Tools</h2>
+      <div class="setting-item">
+        <label>Pen Color:
+          <input type="color" id="pen-color" value="#000000">
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>Pen Size:
+          <input type="range" id="pen-size" min="1" max="10" value="2">
+          <span id="pen-size-value">2</span>px
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>Highlighter Color:
+          <input type="color" id="highlighter-color" value="#ffff00">
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>Highlighter Opacity:
+          <input type="range" id="highlighter-opacity" min="10" max="50" value="30">
+          <span id="highlighter-opacity-value">30</span>%
+        </label>
+      </div>
+      <div class="setting-item">
+        <label>Eraser Size:
+          <input type="range" id="eraser-size" min="10" max="50" value="20">
+          <span id="eraser-size-value">20</span>px
+        </label>
+      </div>
+    </section>
+
+    <div class="buttons">
+      <button id="save" class="btn btn-success">Save Settings</button>
+      <button id="reset" class="btn btn-danger">Reset to Defaults</button>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

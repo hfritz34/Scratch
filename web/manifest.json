@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Scratch",
+  "version": "1.0.0",
+  "description": "Draw on any webpage with customizable shortcuts",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Scratch - Click to toggle drawing mode"
+  },
+  "options_page": "src/options/options.html",
+  "commands": {
+    "toggle-drawing": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D"
+      },
+      "description": "Toggle drawing mode"
+    },
+    "clear-canvas": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+C"
+      },
+      "description": "Clear all drawings"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  }
+}
