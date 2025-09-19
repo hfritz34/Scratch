@@ -2,6 +2,7 @@ class ScratchCanvas {
   constructor() {
     this.isDrawing = false;
     this.isActive = false;
+    this.isDraggingToolbar = false;
     this.currentTool = 'pen';
     this.currentColor = '#000000';
     this.canvas = null;
@@ -144,9 +145,11 @@ class ScratchCanvas {
     const handle = this.toolbar.querySelector('.toolbar-drag-handle');
     let isDragging = false;
     let startX, startY, startLeft, startTop;
+    this.toolbarPosition = 'top'; // Track toolbar position for rotation
 
     const handleMouseDown = (e) => {
       isDragging = true;
+      this.isDraggingToolbar = true; // Prevent drawing while dragging
       startX = e.clientX;
       startY = e.clientY;
 
@@ -154,13 +157,18 @@ class ScratchCanvas {
       startLeft = rect.left;
       startTop = rect.top;
 
+      // Reset any rotation first
       this.toolbar.style.transform = 'none';
       this.toolbar.style.left = startLeft + 'px';
       this.toolbar.style.top = startTop + 'px';
 
+      // Add dragging class for visual feedback
+      this.toolbar.classList.add('dragging');
+
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       e.preventDefault();
+      e.stopPropagation();
     };
 
     const handleMouseMove = (e) => {
@@ -169,17 +177,98 @@ class ScratchCanvas {
       const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
 
-      this.toolbar.style.left = (startLeft + deltaX) + 'px';
-      this.toolbar.style.top = (startTop + deltaY) + 'px';
+      const newLeft = startLeft + deltaX;
+      const newTop = startTop + deltaY;
+
+      this.toolbar.style.left = newLeft + 'px';
+      this.toolbar.style.top = newTop + 'px';
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
+      if (!isDragging) return;
+
       isDragging = false;
+      this.isDraggingToolbar = false;
+
+      // Snap to edge if close
+      this.snapToEdge();
+
+      this.toolbar.classList.remove('dragging');
+
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
 
     handle.addEventListener('mousedown', handleMouseDown);
+  }
+
+  snapToEdge() {
+    const rect = this.toolbar.getBoundingClientRect();
+    const threshold = 50; // Distance from edge to trigger snap
+
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // Calculate distances to edges
+    const distances = {
+      top: rect.top,
+      bottom: windowHeight - rect.bottom,
+      left: rect.left,
+      right: windowWidth - rect.right
+    };
+
+    // Find closest edge
+    let closestEdge = null;
+    let minDistance = threshold;
+
+    for (const [edge, distance] of Object.entries(distances)) {
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestEdge = edge;
+      }
+    }
+
+    // Snap to edge and rotate if needed
+    if (closestEdge) {
+      this.toolbarPosition = closestEdge;
+
+      switch (closestEdge) {
+        case 'top':
+          this.toolbar.style.left = '50%';
+          this.toolbar.style.top = '20px';
+          this.toolbar.style.transform = 'translateX(-50%)';
+          this.toolbar.style.writingMode = 'horizontal-tb';
+          break;
+
+        case 'bottom':
+          this.toolbar.style.left = '50%';
+          this.toolbar.style.top = (windowHeight - rect.height - 20) + 'px';
+          this.toolbar.style.transform = 'translateX(-50%)';
+          this.toolbar.style.writingMode = 'horizontal-tb';
+          break;
+
+        case 'left':
+          this.toolbar.style.left = '20px';
+          this.toolbar.style.top = '50%';
+          this.toolbar.style.transform = 'translateY(-50%) rotate(-90deg)';
+          this.toolbar.style.transformOrigin = 'center center';
+          break;
+
+        case 'right':
+          this.toolbar.style.left = (windowWidth - rect.height - 20) + 'px';
+          this.toolbar.style.top = '50%';
+          this.toolbar.style.transform = 'translateY(-50%) rotate(90deg)';
+          this.toolbar.style.transformOrigin = 'center center';
+          break;
+      }
+
+      // Add snapped class for visual feedback
+      this.toolbar.classList.add('snapped');
+      setTimeout(() => this.toolbar.classList.remove('snapped'), 300);
+    }
   }
 
   setTool(tool) {
@@ -281,6 +370,9 @@ class ScratchCanvas {
 
   handleMouseDown(e) {
     if (!this.isActive) return;
+
+    // Prevent drawing if clicking on toolbar or dragging it
+    if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
     this.isDrawing = true;
     this.lastX = e.pageX;

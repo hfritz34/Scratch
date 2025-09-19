@@ -19,6 +19,26 @@
   z-index: 999999;
   user-select: none;
   cursor: move;
+  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1),
+              box-shadow 0.2s ease;
+}
+
+#scratch-toolbar.dragging {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0.9;
+}
+
+#scratch-toolbar.snapped {
+  animation: snap-feedback 0.3s ease;
+}
+
+@keyframes snap-feedback {
+  0%, 100% {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+  }
 }
 
 .toolbar-drag-handle {
