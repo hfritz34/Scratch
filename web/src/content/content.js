@@ -150,6 +150,7 @@ class ScratchCanvas {
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
     document.addEventListener('contextmenu', (e) => this.handleRightClick(e));
     document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+    document.addEventListener('dblclick', (e) => this.handleDoubleClick(e));
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'toggleDrawing') {
@@ -234,6 +235,13 @@ class ScratchCanvas {
   }
 
   handleKeyPress(e) {
+    // Handle Escape key to exit drawing mode
+    if (e.key === 'Escape' && this.isActive) {
+      e.preventDefault();
+      this.toggleDrawingMode();
+      return;
+    }
+
     if (!this.shortcuts) return;
 
     const key = this.getKeyString(e);
@@ -243,6 +251,15 @@ class ScratchCanvas {
       e.preventDefault();
       this.executeAction(action);
     }
+  }
+
+  handleDoubleClick(e) {
+    // Prevent toolbar clicks from triggering toggle
+    if (e.target.closest('#scratch-toolbar')) return;
+
+    e.preventDefault();
+    this.toggleDrawingMode();
+    console.log('Double-click toggle:', this.isActive);
   }
 
   getKeyString(e) {
@@ -288,7 +305,6 @@ class ScratchCanvas {
 
   loadShortcuts() {
     return {
-      'Alt+D': 'toggle',
       'Ctrl+Shift+C': 'clear',
       'P': 'pen',
       'H': 'highlighter',

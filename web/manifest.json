@@ -26,12 +26,6 @@
   },
   "options_page": "src/options/options.html",
   "commands": {
-    "toggle-drawing": {
-      "suggested_key": {
-        "default": "Alt+D"
-      },
-      "description": "Toggle drawing mode"
-    },
     "clear-canvas": {
       "suggested_key": {
         "default": "Ctrl+Shift+C"

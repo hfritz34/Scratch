@@ -5,9 +5,7 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.commands.onCommand.addListener((command) => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]) {
-      if (command === 'toggle-drawing') {
-        chrome.tabs.sendMessage(tabs[0].id, { action: 'toggleDrawing' });
-      } else if (command === 'clear-canvas') {
+      if (command === 'clear-canvas') {
         chrome.tabs.sendMessage(tabs[0].id, { action: 'clearCanvas' });
       }
     }
@@ -16,7 +14,6 @@ chrome.commands.onCommand.addListener((command) => {
 
 chrome.runtime.onInstalled.addListener(() => {
   const defaultShortcuts = {
-    'Ctrl+Shift+D': 'toggle',
     'Ctrl+Shift+C': 'clear',
     'P': 'pen',
     'H': 'highlighter',
