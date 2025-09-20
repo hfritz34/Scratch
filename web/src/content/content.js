@@ -34,6 +34,11 @@ class ScratchCanvas {
     // Partial eraser properties
     this.isErasing = false;
     this.erasePoints = [];
+    // Quick delete mode properties
+    this.isQuickDeleteMode = false;
+    this.quickDeleteStrokes = new Set(); // Track strokes to delete
+    this.isQuickDeleting = false;
+    this.previousTool = null;
     this.init();
   }
 
@@ -877,6 +882,12 @@ class ScratchCanvas {
     // Prevent drawing if clicking on toolbar or dragging it
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
+    // Prevent ALL drawing-related actions if in quick delete mode
+    if (this.isQuickDeleteMode) return;
+
+    // Only allow drawing with left mouse button (button 0)
+    if (e.button !== 0) return;
+
     if (this.currentTool === 'eraser') {
       if (this.eraserMode === 'whole') {
         // Whole eraser: detect and remove strokes at click point
@@ -910,6 +921,9 @@ class ScratchCanvas {
 
   handleMouseMove(e) {
     if (!this.isActive || !this.isDrawing) return;
+
+    // Don't draw if in quick delete mode
+    if (this.isQuickDeleteMode) return;
 
     // Handle partial erasing
     if (this.currentTool === 'eraser' && this.eraserMode === 'partial' && this.isErasing) {
@@ -957,6 +971,9 @@ class ScratchCanvas {
   }
 
   handleMouseUp(e) {
+    // Don't process if in quick delete mode (handled by quick delete listeners)
+    if (this.isQuickDeleteMode) return;
+
     // End partial erasing
     if (this.isErasing) {
       this.isErasing = false;
@@ -988,32 +1005,119 @@ class ScratchCanvas {
       return;
     }
 
-    // Single right-click to temporarily switch to eraser
-    if (this.currentTool !== 'eraser') {
-      this.previousTool = this.currentTool;
-      this.setTool('eraser');
+    // Start quick delete mode on right-click down
+    this.startQuickDeleteMode(e);
+    this.lastRightClick = now;
+  }
 
-      // Set up listener to revert tool on mouse up
-      const revertTool = (mouseEvent) => {
-        // Only revert if we're not still right-clicking
-        if (mouseEvent.button !== 2) {
-          this.setTool(this.previousTool);
-          this.previousTool = null;
-          document.removeEventListener('mouseup', revertTool);
-          document.removeEventListener('contextmenu', preventContext);
+  startQuickDeleteMode(e) {
+    if (this.isQuickDeleteMode) return;
+
+    console.log('Starting quick delete mode');
+    this.isQuickDeleteMode = true;
+    this.quickDeleteStrokes.clear();
+    this.previousTool = this.currentTool;
+    this.isQuickDeleting = true; // Track if we're actively deleting
+
+    // Set up event listeners for quick delete
+    const handleMouseMove = (moveEvent) => {
+      if (this.isQuickDeleteMode && this.isQuickDeleting) {
+        this.highlightStrokesForDeletion(moveEvent.pageX, moveEvent.pageY);
+      }
+    };
+
+    const handleMouseUp = (upEvent) => {
+      if (upEvent.button === 2) { // Right mouse button
+        this.endQuickDeleteMode();
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('contextmenu', preventContext);
+      }
+    };
+
+    const preventContext = (contextEvent) => {
+      contextEvent.preventDefault();
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('contextmenu', preventContext);
+
+    // Initial erase at click position
+    this.highlightStrokesForDeletion(e.pageX, e.pageY);
+  }
+
+  highlightStrokesForDeletion(x, y) {
+    // Find strokes near the cursor
+    const eraserSize = this.toolSizes.eraser;
+
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      if (!stroke || !stroke.bounds || !stroke.points || stroke.points.length === 0) continue;
+
+      const padding = Math.max(stroke.size || 15, 15);
+
+      if (x >= stroke.bounds.minX - padding && x <= stroke.bounds.maxX + padding &&
+          y >= stroke.bounds.minY - padding && y <= stroke.bounds.maxY + padding) {
+
+        if (this.isPointNearStroke(x, y, stroke)) {
+          this.quickDeleteStrokes.add(i);
         }
-      };
-
-      // Prevent context menu during eraser mode
-      const preventContext = (contextEvent) => {
-        contextEvent.preventDefault();
-      };
-
-      document.addEventListener('mouseup', revertTool);
-      document.addEventListener('contextmenu', preventContext);
+      }
     }
 
-    this.lastRightClick = now;
+    // Redraw with highlights
+    this.redrawCanvasWithHighlights();
+  }
+
+  endQuickDeleteMode() {
+    console.log(`Ending quick delete mode, deleting ${this.quickDeleteStrokes.size} strokes`);
+
+    // Delete all highlighted strokes (in reverse order to maintain indices)
+    const strokeIndices = Array.from(this.quickDeleteStrokes).sort((a, b) => b - a);
+    for (const index of strokeIndices) {
+      this.strokes.splice(index, 1);
+    }
+
+    // Clear quick delete state
+    this.isQuickDeleteMode = false;
+    this.quickDeleteStrokes.clear();
+    this.isQuickDeleting = false;
+
+    // Reset any drawing state that might be stuck
+    this.isDrawing = false;
+    this.currentStroke = null;
+
+    // Return to previous tool
+    if (this.previousTool) {
+      this.setTool(this.previousTool);
+      this.previousTool = null;
+    }
+
+    // Redraw canvas normally
+    this.redrawCanvas();
+  }
+
+  redrawCanvasWithHighlights() {
+    // Clear canvas
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Redraw all strokes
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      const isHighlighted = this.quickDeleteStrokes.has(i);
+
+      if (isHighlighted) {
+        // Draw highlighted stroke with translucency
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.3; // Make translucent
+        this.drawStroke(stroke);
+        this.ctx.restore();
+      } else {
+        // Draw normal stroke
+        this.drawStroke(stroke);
+      }
+    }
   }
 
   handleKeyPress(e) {

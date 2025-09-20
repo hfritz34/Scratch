@@ -81,6 +81,7 @@ h2 {
 .setting-item input[type="range"] {
   margin: 0 10px;
   width: 150px;
+  appearance: none;
   -webkit-appearance: none;
   height: 4px;
   border-radius: 2px;
