@@ -292,6 +292,9 @@ class ScratchCanvas {
     let isDragging = false;
     let startX, startY, startLeft, startTop;
     this.toolbarPosition = null; // Track toolbar position for rotation
+    let orientationPreviewRAF = null;
+    let lastPreviewEdge = null;
+    let lastPreviewTime = 0;
 
     const handleMouseDown = (e) => {
       isDragging = true;
@@ -331,6 +334,27 @@ class ScratchCanvas {
       // Use left/top for precise positioning during drag
       this.toolbar.style.left = newLeft + 'px';
       this.toolbar.style.top = newTop + 'px';
+
+      // Debounced orientation preview as user nears edges
+      const now = performance.now();
+      const preview = () => {
+        const edge = this.getClosestEdgeByPoint(e.clientX, e.clientY, 120);
+        if (edge && edge !== lastPreviewEdge) {
+          lastPreviewEdge = edge;
+          if (edge === 'left' || edge === 'right') {
+            this.toolbar.classList.add('vertical');
+            this.toolbar.classList.remove('horizontal');
+          } else {
+            this.toolbar.classList.add('horizontal');
+            this.toolbar.classList.remove('vertical');
+          }
+        }
+        orientationPreviewRAF = null;
+        lastPreviewTime = now;
+      };
+      if (!orientationPreviewRAF && now - lastPreviewTime > 60) {
+        orientationPreviewRAF = requestAnimationFrame(preview);
+      }
     };
 
     const handleMouseUp = (e) => {
@@ -349,6 +373,61 @@ class ScratchCanvas {
     };
 
     handle.addEventListener('mousedown', handleMouseDown);
+  }
+
+  getClosestEdgeByPoint(clientX, clientY, threshold = 120) {
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const distances = {
+      top: clientY,
+      bottom: windowHeight - clientY,
+      left: clientX,
+      right: windowWidth - clientX
+    };
+    let closest = null;
+    let minDist = threshold;
+    for (const [edge, dist] of Object.entries(distances)) {
+      if (dist < minDist) {
+        minDist = dist;
+        closest = edge;
+      }
+    }
+    return closest;
+  }
+
+  previewOrientationDuringDrag(clientX, clientY) {
+    if (!this.toolbar) return;
+
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const distances = {
+      top: clientY,
+      bottom: windowHeight - clientY,
+      left: clientX,
+      right: windowWidth - clientX
+    };
+
+    const previewThreshold = 120;
+    let targetEdge = null;
+    let minDistance = previewThreshold;
+
+    for (const [edge, distance] of Object.entries(distances)) {
+      if (distance < minDistance) {
+        minDistance = distance;
+        targetEdge = edge;
+      }
+    }
+
+    if (!targetEdge) return;
+
+    if (targetEdge === 'left' || targetEdge === 'right') {
+      this.toolbar.classList.add('vertical');
+      this.toolbar.classList.remove('horizontal');
+    } else if (targetEdge === 'top' || targetEdge === 'bottom') {
+      this.toolbar.classList.add('horizontal');
+      this.toolbar.classList.remove('vertical');
+    }
   }
 
   snapToEdge() {
@@ -391,24 +470,44 @@ class ScratchCanvas {
   positionToolbarAtEdge(edge) {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const rect = this.toolbar.getBoundingClientRect();
+    const currentRect = this.toolbar.getBoundingClientRect();
 
     // Remove any existing orientation classes
     this.toolbar.classList.remove('horizontal', 'vertical', 'edge-top', 'edge-bottom', 'edge-left', 'edge-right');
 
     switch (edge) {
       case 'top':
-        this.toolbar.style.left = '50%';
+        this.toolbar.classList.add('horizontal');
+        // Anchor near left/right if close, else center
+        if (currentRect.left <= 120) {
+          this.toolbar.style.left = '10px';
+          this.toolbar.style.transform = 'none';
+        } else if ((windowWidth - currentRect.right) <= 120) {
+          this.toolbar.style.left = (windowWidth - this.toolbar.offsetWidth - 10) + 'px';
+          this.toolbar.style.transform = 'none';
+        } else {
+          this.toolbar.style.left = '50%';
+          this.toolbar.style.transform = 'translateX(-50%)';
+        }
         this.toolbar.style.top = '20px';
-        this.toolbar.style.transform = 'translateX(-50%)';
-        this.toolbar.classList.add('horizontal', 'edge-top');
+        this.toolbar.classList.add('edge-top');
         break;
 
       case 'bottom':
-        this.toolbar.style.left = '50%';
-        this.toolbar.style.top = (windowHeight - rect.height - 20) + 'px';
-        this.toolbar.style.transform = 'translateX(-50%)';
-        this.toolbar.classList.add('horizontal', 'edge-bottom');
+        this.toolbar.classList.add('horizontal');
+        // Anchor near left/right if close, else center
+        if (currentRect.left <= 120) {
+          this.toolbar.style.left = '10px';
+          this.toolbar.style.transform = 'none';
+        } else if ((windowWidth - currentRect.right) <= 120) {
+          this.toolbar.style.left = (windowWidth - this.toolbar.offsetWidth - 10) + 'px';
+          this.toolbar.style.transform = 'none';
+        } else {
+          this.toolbar.style.left = '50%';
+          this.toolbar.style.transform = 'translateX(-50%)';
+        }
+        this.toolbar.style.top = (windowHeight - this.toolbar.offsetHeight - 20) + 'px';
+        this.toolbar.classList.add('edge-bottom');
         break;
 
       case 'left':

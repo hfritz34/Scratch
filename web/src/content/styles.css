@@ -24,8 +24,8 @@
   z-index: 999999;
   user-select: none;
   cursor: move;
-  transition: left 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), top 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), transform 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  will-change: left, top, transform;
+  transition: left 0.5s cubic-bezier(0.22, 1, 0.36, 1), top 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease-out, width 0.35s cubic-bezier(0.22, 1, 0.36, 1), height 0.35s cubic-bezier(0.22, 1, 0.36, 1), padding 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: left, top, transform, width, height, padding;
 }
 
 #scratch-toolbar.dragging {
@@ -39,11 +39,12 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 -1px 0 rgba(0, 0, 0, 0.08);
   transform: scale(1.02);
-  transition: none !important;
+  /* Keep position instantaneous while dragging, but allow visual flip to animate more gently */
+  transition: left 0s linear, top 0s linear, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease-out, width 0.35s cubic-bezier(0.22, 1, 0.36, 1), height 0.35s cubic-bezier(0.22, 1, 0.36, 1), padding 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 #scratch-toolbar.snapping {
-  transition: left 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.4), top 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.4), transform 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.4), box-shadow 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.4) !important;
+  transition: left 0.5s cubic-bezier(0.22, 1, 0.36, 1), top 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease-out !important;
 }
 
 #scratch-toolbar.snapped {
