@@ -26,11 +26,14 @@ class ScratchCanvas {
     this.currentStroke = null;
     this.palettes = this.initializePalettes();
     this.currentPalette = 'simple';
+    this.paletteSwitchCooldown = false;
+    this.isPreviewingPalette = false;
     // Hover-based activation properties
     this.hoverTimeout = null;
     this.hideTimeout = null;
     this.isHoveringContent = false;
     this.isHoveringToolbar = false;
+    this.manuallyDisabled = true; // Start disabled to avoid being intrusive, user must manually enable
     // Partial eraser properties
     this.isErasing = false;
     this.erasePoints = [];
@@ -39,6 +42,10 @@ class ScratchCanvas {
     this.quickDeleteStrokes = new Set(); // Track strokes to delete
     this.isQuickDeleting = false;
     this.previousTool = null;
+    // Eraser delete mode properties (for whole eraser left-click)
+    this.isEraserDeleteMode = false;
+    this.eraserDeleteStrokes = new Set();
+    this.isEraserDeleting = false;
     this.init();
   }
 
@@ -242,10 +249,9 @@ class ScratchCanvas {
       });
 
       swatch.addEventListener('mouseleave', (e) => {
-        if (!e.currentTarget.classList.contains('active')) {
-          e.currentTarget.style.transform = '';
-          e.currentTarget.style.boxShadow = '';
-        }
+        // Always clear hover effects on mouse leave, active state will be handled by CSS
+        e.currentTarget.style.transform = '';
+        e.currentTarget.style.boxShadow = '';
       });
     });
 
@@ -523,17 +529,45 @@ class ScratchCanvas {
     this.toolbar.querySelectorAll('.size-buttons').forEach(sizeGroup => {
       if (sizeGroup.dataset.tool === tool) {
         sizeGroup.style.display = 'flex';
+        // Update active size button for this tool
+        const currentSize = this.toolSizes[tool];
+        sizeGroup.querySelectorAll('.size-btn').forEach(btn => {
+          btn.classList.remove('active');
+          if (parseInt(btn.dataset.size) === currentSize) {
+            btn.classList.add('active');
+          }
+        });
       } else {
         sizeGroup.style.display = 'none';
       }
     });
 
-    // Show/hide eraser mode pills
+    // Show/hide color swatches and palette button based on tool
+    const colorSwatches = this.toolbar.querySelectorAll('.color-swatch');
+    const paletteBtn = this.toolbar.querySelector('.palette-btn');
+    const dividers = this.toolbar.querySelectorAll('.toolbar-divider');
     const eraserModePills = this.toolbar.querySelector('.eraser-mode-pills');
-    if (eraserModePills) {
-      if (tool === 'eraser') {
+
+    if (tool === 'eraser') {
+      // Hide colors and palette button, show eraser mode pills
+      colorSwatches.forEach(swatch => swatch.style.display = 'none');
+      if (paletteBtn) paletteBtn.style.display = 'none';
+      // Hide the dividers around colors when eraser is selected
+      if (dividers[0]) dividers[0].style.display = 'none';
+      if (dividers[1]) dividers[1].style.display = 'none';
+      // Show eraser mode pills
+      if (eraserModePills) {
         eraserModePills.classList.add('visible');
-      } else {
+      }
+    } else {
+      // Show colors and palette button, hide eraser mode pills
+      colorSwatches.forEach(swatch => swatch.style.display = '');
+      if (paletteBtn) paletteBtn.style.display = '';
+      // Show the dividers
+      if (dividers[0]) dividers[0].style.display = '';
+      if (dividers[1]) dividers[1].style.display = '';
+      // Hide eraser mode pills
+      if (eraserModePills) {
         eraserModePills.classList.remove('visible');
       }
     }
@@ -588,13 +622,18 @@ class ScratchCanvas {
     // Clear any existing hide timeout
     this.clearHideTimeout();
 
+    // Don't activate if manually disabled
+    if (this.manuallyDisabled) {
+      return;
+    }
+
     // Start hover timeout for activation
     if (this.hoverTimeout) {
       clearTimeout(this.hoverTimeout);
     }
 
     this.hoverTimeout = setTimeout(() => {
-      if (this.isHoveringContent && !this.isActive) {
+      if (this.isHoveringContent && !this.isActive && !this.manuallyDisabled) {
         this.activateDrawingMode();
       }
     }, 500); // 500ms delay as requested
@@ -623,7 +662,7 @@ class ScratchCanvas {
   }
 
   activateDrawingMode() {
-    if (!this.isActive) {
+    if (!this.isActive && !this.manuallyDisabled) {
       this.isActive = true;
       console.log('Hover-activated drawing mode');
       this.canvas.style.display = 'block';
@@ -766,6 +805,8 @@ class ScratchCanvas {
     if (!this.isActive) return;
 
     const color = this.currentColor || '#000000';
+    // Add timestamp to force cursor refresh and prevent caching
+    const timestamp = Date.now();
     let cursorSvg = '';
 
     if (this.currentTool === 'pen') {
@@ -773,6 +814,7 @@ class ScratchCanvas {
       cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <circle cx="16" cy="16" r="8" fill="${color}" stroke="white" stroke-width="2"/>
         <circle cx="16" cy="16" r="2" fill="white"/>
+        <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     } else if (this.currentTool === 'highlighter') {
       // Highlighter cursor with transparent color
@@ -780,6 +822,7 @@ class ScratchCanvas {
       cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <rect x="8" y="8" width="16" height="16" fill="${rgba}" stroke="white" stroke-width="2"/>
         <circle cx="16" cy="16" r="2" fill="black"/>
+        <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     } else if (this.currentTool === 'eraser') {
       // Eraser cursor
@@ -787,11 +830,22 @@ class ScratchCanvas {
         <circle cx="16" cy="16" r="10" fill="none" stroke="red" stroke-width="3"/>
         <line x1="10" y1="16" x2="22" y2="16" stroke="red" stroke-width="2"/>
         <line x1="16" y1="10" x2="16" y2="22" stroke="red" stroke-width="2"/>
+        <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     }
 
     const encodedSvg = encodeURIComponent(cursorSvg);
-    this.canvas.style.cursor = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, crosshair`;
+    const cursorUrl = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, crosshair`;
+
+
+    // Force cursor update by temporarily setting to different values
+    this.canvas.style.cursor = 'auto';
+    setTimeout(() => {
+      this.canvas.style.cursor = 'crosshair';
+      setTimeout(() => {
+        this.canvas.style.cursor = cursorUrl;
+      }, 10);
+    }, 10);
   }
 
   setColor(color) {
@@ -800,6 +854,9 @@ class ScratchCanvas {
     // Update active color swatch
     this.toolbar.querySelectorAll('.color-swatch').forEach(swatch => {
       swatch.classList.remove('active');
+      // Clear any hover effects when switching colors
+      swatch.style.transform = '';
+      swatch.style.boxShadow = '';
     });
 
     const swatch = this.toolbar.querySelector(`[data-color="${color}"]`);
@@ -807,8 +864,11 @@ class ScratchCanvas {
       swatch.classList.add('active');
     }
 
-    // Update custom color picker
-    this.toolbar.querySelector('#custom-color').value = color;
+    // Update custom color picker if it exists
+    const customColorPicker = this.toolbar.querySelector('#custom-color');
+    if (customColorPicker) {
+      customColorPicker.value = color;
+    }
 
     // Update cursor to match new color
     this.updateCursor();
@@ -833,7 +893,7 @@ class ScratchCanvas {
     window.addEventListener('scroll', () => {
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
-        this.updateCanvasSize();
+        this.resizeCanvas(); // Use resizeCanvas which preserves strokes
       }, 100);
     }, { passive: true });
 
@@ -862,6 +922,14 @@ class ScratchCanvas {
   toggleDrawingMode() {
     this.isActive = !this.isActive;
     console.log('Toggle drawing mode:', this.isActive);
+
+    // Track manual disable/enable state for hover activation
+    if (!this.isActive) {
+      this.manuallyDisabled = true;
+    } else {
+      this.manuallyDisabled = false;
+    }
+
     this.canvas.style.display = this.isActive ? 'block' : 'none';
     this.canvas.style.pointerEvents = this.isActive ? 'auto' : 'none';
     this.toolbar.style.display = this.isActive ? 'flex' : 'none';
@@ -882,16 +950,16 @@ class ScratchCanvas {
     // Prevent drawing if clicking on toolbar or dragging it
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
-    // Prevent ALL drawing-related actions if in quick delete mode
-    if (this.isQuickDeleteMode) return;
+    // Prevent ALL drawing-related actions if in quick delete mode or eraser delete mode
+    if (this.isQuickDeleteMode || this.isEraserDeleteMode) return;
 
     // Only allow drawing with left mouse button (button 0)
     if (e.button !== 0) return;
 
     if (this.currentTool === 'eraser') {
       if (this.eraserMode === 'whole') {
-        // Whole eraser: detect and remove strokes at click point
-        this.wholeErase(e.pageX, e.pageY);
+        // Whole eraser: start delete preview mode (like quick delete but with left click)
+        this.startEraserDeleteMode(e);
         return;
       } else {
         // Partial eraser: start erasing mode
@@ -996,6 +1064,12 @@ class ScratchCanvas {
     if (!this.isActive) return;
     e.preventDefault();
 
+    // If eraser tool is selected, right-click toggles between whole/partial modes
+    if (this.currentTool === 'eraser') {
+      this.toggleEraserMode();
+      return;
+    }
+
     const now = Date.now();
 
     // Double right-click to clear canvas
@@ -1008,6 +1082,122 @@ class ScratchCanvas {
     // Start quick delete mode on right-click down
     this.startQuickDeleteMode(e);
     this.lastRightClick = now;
+  }
+
+  toggleEraserMode() {
+    if (this.currentTool !== 'eraser') return;
+
+    // Toggle between whole and partial modes
+    this.eraserMode = this.eraserMode === 'whole' ? 'partial' : 'whole';
+
+    // Update the mode pills visual state
+    const modePills = this.toolbar.querySelectorAll('.mode-pill');
+    modePills.forEach(pill => {
+      pill.classList.remove('active');
+      if (pill.dataset.mode === this.eraserMode) {
+        pill.classList.add('active');
+      }
+    });
+
+    console.log('Eraser mode toggled to:', this.eraserMode);
+  }
+
+  startEraserDeleteMode(e) {
+    // Similar to quick delete but for left click when eraser tool is in whole mode
+    if (this.isEraserDeleteMode) return;
+
+    console.log('Starting eraser delete mode');
+    this.isEraserDeleteMode = true;
+    this.eraserDeleteStrokes = new Set(); // Track stroke indices to delete
+    this.isEraserDeleting = true;
+
+    // Set up event listeners for eraser delete mode
+    const handleMouseMove = (moveEvent) => {
+      if (this.isEraserDeleteMode && this.isEraserDeleting) {
+        this.highlightStrokesForEraserDeletion(moveEvent.pageX, moveEvent.pageY);
+      }
+    };
+
+    const handleMouseUp = (upEvent) => {
+      if (upEvent.button === 0 && this.isEraserDeleteMode) { // Left mouse button
+        this.endEraserDeleteMode();
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    // Initial highlight at click position
+    this.highlightStrokesForEraserDeletion(e.pageX, e.pageY);
+  }
+
+  highlightStrokesForEraserDeletion(x, y) {
+    // Find strokes near the cursor (similar to quick delete)
+    const eraserSize = this.toolSizes.eraser;
+
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      if (!stroke || !stroke.bounds || !stroke.points || stroke.points.length === 0) continue;
+
+      const padding = Math.max(stroke.size || 15, 15);
+
+      if (x >= stroke.bounds.minX - padding && x <= stroke.bounds.maxX + padding &&
+          y >= stroke.bounds.minY - padding && y <= stroke.bounds.maxY + padding) {
+
+        if (this.isPointNearStroke(x, y, stroke)) {
+          this.eraserDeleteStrokes.add(i);
+        }
+      }
+    }
+
+    // Redraw with highlights (using eraser delete strokes)
+    this.redrawCanvasWithEraserHighlights();
+  }
+
+  redrawCanvasWithEraserHighlights() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      if (!stroke || !stroke.points || stroke.points.length === 0) continue;
+
+      // Check if this stroke is marked for deletion
+      if (this.eraserDeleteStrokes.has(i)) {
+        // Draw with translucent effect for strokes to be deleted
+        this.ctx.globalAlpha = 0.3;
+      } else {
+        this.ctx.globalAlpha = 1.0;
+      }
+
+      this.drawStroke(stroke);
+    }
+
+    this.ctx.globalAlpha = 1.0;
+  }
+
+  endEraserDeleteMode() {
+    if (!this.isEraserDeleteMode) return;
+
+    const strokesToDelete = this.eraserDeleteStrokes.size;
+    console.log(`Ending eraser delete mode, deleting ${strokesToDelete} strokes`);
+
+    // Delete all highlighted strokes (in reverse order to maintain indices)
+    if (strokesToDelete > 0) {
+      const strokeIndices = Array.from(this.eraserDeleteStrokes).sort((a, b) => b - a);
+      for (const index of strokeIndices) {
+        this.strokes.splice(index, 1);
+      }
+    }
+
+    // Reset mode
+    this.isEraserDeleteMode = false;
+    this.isEraserDeleting = false;
+    this.eraserDeleteStrokes.clear();
+
+    // Redraw canvas normally
+    this.redrawCanvas();
   }
 
   startQuickDeleteMode(e) {
@@ -1380,16 +1570,32 @@ class ScratchCanvas {
   }
 
   switchPalette() {
+    // Prevent rapid palette switching
+    if (this.paletteSwitchCooldown) {
+      return;
+    }
+
+    this.paletteSwitchCooldown = true;
+    setTimeout(() => {
+      this.paletteSwitchCooldown = false;
+    }, 200); // 200ms cooldown
+
     const paletteNames = Object.keys(this.palettes);
     const currentIndex = paletteNames.indexOf(this.currentPalette);
     const nextIndex = (currentIndex + 1) % paletteNames.length;
     this.currentPalette = paletteNames[nextIndex];
     this.updateToolbarColors();
+
+    // Save current palette preference
+    chrome.storage.sync.set({ selectedPalette: this.currentPalette });
   }
 
   updateToolbarColors() {
     const colors = this.getCurrentPaletteColors();
     const swatches = this.toolbar.querySelectorAll('.color-swatch');
+
+    // Clear all active states first
+    swatches.forEach(swatch => swatch.classList.remove('active'));
 
     swatches.forEach((swatch, index) => {
       if (index < colors.length) {
@@ -1399,15 +1605,31 @@ class ScratchCanvas {
       }
     });
 
-    // Update current color to first color of new palette
-    this.currentColor = colors[0];
-    swatches[0].classList.add('active');
-    for (let i = 1; i < swatches.length; i++) {
-      swatches[i].classList.remove('active');
+    // Check if current color exists in new palette
+    const currentColorInNewPalette = colors.includes(this.currentColor);
+
+    if (currentColorInNewPalette) {
+      // Keep current color if it exists in new palette
+      const activeIndex = colors.indexOf(this.currentColor);
+      swatches[activeIndex].classList.add('active');
+    } else {
+      // Switch to first color of new palette if current color doesn't exist
+      this.currentColor = colors[0];
+      swatches[0].classList.add('active');
     }
+
+    // Update cursor to reflect color change
+    this.updateCursor();
   }
 
   previewNextPalette() {
+    // Don't preview if switching is on cooldown or already previewing
+    if (this.paletteSwitchCooldown || this.isPreviewingPalette) {
+      return;
+    }
+
+    this.isPreviewingPalette = true;
+
     const paletteNames = Object.keys(this.palettes);
     const currentIndex = paletteNames.indexOf(this.currentPalette);
     const nextIndex = (currentIndex + 1) % paletteNames.length;
@@ -1415,6 +1637,7 @@ class ScratchCanvas {
 
     // Store original colors for restoration
     this.originalColors = this.getCurrentPaletteColors();
+    this.originalActiveColor = this.currentColor;
 
     // Temporarily show next palette colors
     const colors = this.palettes[nextPalette];
@@ -1424,6 +1647,7 @@ class ScratchCanvas {
       if (index < colors.length) {
         swatch.style.backgroundColor = colors[index];
         swatch.style.opacity = '0.7'; // Make it look like a preview
+        swatch.setAttribute('data-color', colors[index]);
       }
     });
 
@@ -1435,17 +1659,32 @@ class ScratchCanvas {
   }
 
   clearPalettePreview() {
-    if (this.originalColors) {
+    if (this.originalColors && this.isPreviewingPalette) {
       const swatches = this.toolbar.querySelectorAll('.color-swatch');
+
+      // Clear all active states first
+      swatches.forEach(swatch => swatch.classList.remove('active'));
 
       swatches.forEach((swatch, index) => {
         if (index < this.originalColors.length) {
           swatch.style.backgroundColor = this.originalColors[index];
           swatch.style.opacity = '1'; // Restore full opacity
+          swatch.setAttribute('data-color', this.originalColors[index]);
         }
       });
 
+      // Restore active color state
+      if (this.originalActiveColor) {
+        const activeSwatch = this.toolbar.querySelector(`[data-color="${this.originalActiveColor}"]`);
+        if (activeSwatch) {
+          activeSwatch.classList.add('active');
+        }
+      }
+
+      // Clear the stored original data
       this.originalColors = null;
+      this.originalActiveColor = null;
+      this.isPreviewingPalette = false;
     }
 
     // Clear palette button highlight
