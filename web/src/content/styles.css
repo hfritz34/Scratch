@@ -531,3 +531,60 @@
   transform: scale(1.02);
 }
 
+/* Vertical toolbar orientation */
+#scratch-toolbar.vertical {
+  flex-direction: column;
+  padding: 16px 10px;
+  gap: 12px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+#scratch-toolbar.vertical .toolbar-drag-handle {
+  width: 24px;
+  height: 6px;
+  margin-right: 0;
+  margin-bottom: 8px;
+  background: linear-gradient(to right,
+    rgba(0, 0, 0, 0.15) 0%,
+    rgba(0, 0, 0, 0.25) 30%,
+    rgba(0, 0, 0, 0.08) 70%,
+    rgba(0, 0, 0, 0.15) 100%);
+}
+
+#scratch-toolbar.vertical .tool-btn,
+#scratch-toolbar.vertical .size-btn {
+  margin: 2px 0;
+}
+
+#scratch-toolbar.vertical .size-buttons {
+  flex-direction: column;
+  gap: 4px;
+}
+
+#scratch-toolbar.vertical .color-swatch {
+  margin: 3px 0;
+}
+
+#scratch-toolbar.vertical .eraser-mode-pills {
+  flex-direction: column;
+  gap: 6px;
+}
+
+#scratch-toolbar.vertical .eraser-mode-pills .mode-pill {
+  min-width: 60px;
+  padding: 6px 10px;
+  writing-mode: horizontal-tb;
+}
+
+#scratch-toolbar.vertical .palette-btn,
+#scratch-toolbar.vertical .clear-btn {
+  margin: 4px 0;
+}
+
+#scratch-toolbar.vertical .toolbar-divider {
+  width: 80%;
+  height: 1px;
+  margin: 6px auto;
+}
+

@@ -325,20 +325,10 @@ class ScratchCanvas {
 
       const deltaX = e.clientX - startX;
       const deltaY = e.clientY - startY;
+      const newLeft = startLeft + deltaX;
+      const newTop = startTop + deltaY;
 
-      let newLeft = startLeft + deltaX;
-      let newTop = startTop + deltaY;
-
-      // Get toolbar dimensions
-      const rect = this.toolbar.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-      const margin = 10;
-
-      // Constrain to window bounds during drag
-      newLeft = Math.max(margin, Math.min(newLeft, windowWidth - rect.width - margin));
-      newTop = Math.max(margin, Math.min(newTop, windowHeight - rect.height - margin));
-
+      // Use left/top for precise positioning during drag
       this.toolbar.style.left = newLeft + 'px';
       this.toolbar.style.top = newTop + 'px';
     };
@@ -406,33 +396,38 @@ class ScratchCanvas {
     const windowHeight = window.innerHeight;
     const rect = this.toolbar.getBoundingClientRect();
 
+    // Remove any existing orientation classes
+    this.toolbar.classList.remove('horizontal', 'vertical', 'edge-top', 'edge-bottom', 'edge-left', 'edge-right');
+
     switch (edge) {
       case 'top':
         this.toolbar.style.left = '50%';
         this.toolbar.style.top = '20px';
         this.toolbar.style.transform = 'translateX(-50%)';
-        this.toolbar.style.writingMode = 'horizontal-tb';
+        this.toolbar.classList.add('horizontal', 'edge-top');
         break;
 
       case 'bottom':
         this.toolbar.style.left = '50%';
         this.toolbar.style.top = (windowHeight - rect.height - 20) + 'px';
         this.toolbar.style.transform = 'translateX(-50%)';
-        this.toolbar.style.writingMode = 'horizontal-tb';
+        this.toolbar.classList.add('horizontal', 'edge-bottom');
         break;
 
       case 'left':
         this.toolbar.style.left = '20px';
         this.toolbar.style.top = '50%';
-        this.toolbar.style.transform = 'translateY(-50%) rotate(-90deg)';
-        this.toolbar.style.transformOrigin = 'center center';
+        this.toolbar.style.transform = 'translateY(-50%)';
+        this.toolbar.classList.add('vertical', 'edge-left');
         break;
 
       case 'right':
-        this.toolbar.style.left = (windowWidth - rect.height - 20) + 'px';
+        // Calculate position considering toolbar will be vertical
+        const toolbarWidth = rect.width;
+        this.toolbar.style.left = (windowWidth - toolbarWidth - 20) + 'px';
         this.toolbar.style.top = '50%';
-        this.toolbar.style.transform = 'translateY(-50%) rotate(90deg)';
-        this.toolbar.style.transformOrigin = 'center center';
+        this.toolbar.style.transform = 'translateY(-50%)';
+        this.toolbar.classList.add('vertical', 'edge-right');
         break;
     }
   }
@@ -1557,6 +1552,7 @@ class ScratchCanvas {
   }
 
   loadShortcuts() {
+    // Default shortcuts - will be overridden by stored shortcuts in loadSettings
     return {
       'Ctrl+Shift+C': 'clear',
       'P': 'pen',
@@ -1714,13 +1710,15 @@ class ScratchCanvas {
       }
     });
 
-    // Listen for palette updates from options page
+    // Listen for palette and shortcut updates from options page
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'updatePalette') {
         this.currentPalette = request.palette;
         if (this.toolbar) {
           this.updateToolbarColors();
         }
+      } else if (request.action === 'updateShortcuts') {
+        this.shortcuts = request.shortcuts;
       }
     });
   }

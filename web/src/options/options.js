@@ -12,6 +12,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Shortcut management
+  const addShortcutBtn = document.getElementById('add-shortcut');
+  if (addShortcutBtn) {
+    addShortcutBtn.addEventListener('click', addNewShortcut);
+  }
+
   document.getElementById('save').addEventListener('click', saveSettings);
   document.getElementById('reset').addEventListener('click', resetSettings);
 
@@ -92,17 +98,111 @@ function loadSettings() {
 
 function displayShortcuts(shortcuts) {
   const container = document.getElementById('shortcuts-list');
+  if (!container) return;
+
   container.innerHTML = '';
 
-  Object.entries(shortcuts).forEach(([key, action]) => {
+  // Add default shortcuts if none exist
+  const defaultShortcuts = shortcuts || {
+    'Ctrl+Shift+C': 'clear',
+    'P': 'pen',
+    'H': 'highlighter',
+    'E': 'eraser'
+  };
+
+  Object.entries(defaultShortcuts).forEach(([key, action]) => {
     const item = document.createElement('div');
     item.className = 'shortcut-item';
     item.innerHTML = `
       <span class="shortcut-key">${key}</span>
-      <span class="shortcut-action">${action}</span>
+      <span class="shortcut-action">${getActionDescription(action)}</span>
       <button class="shortcut-delete" data-key="${key}">Delete</button>
     `;
     container.appendChild(item);
+
+    // Add delete event listener
+    const deleteBtn = item.querySelector('.shortcut-delete');
+    deleteBtn.addEventListener('click', () => deleteShortcut(key));
+  });
+}
+
+function getActionDescription(action) {
+  const descriptions = {
+    'clear': 'Clear Canvas',
+    'pen': 'Select Pen Tool',
+    'highlighter': 'Select Highlighter Tool',
+    'eraser': 'Select Eraser Tool',
+    'toggle': 'Toggle Drawing Mode'
+  };
+  return descriptions[action] || action;
+}
+
+function addNewShortcut() {
+  const key = prompt('Enter key combination (e.g., Ctrl+Shift+A, F1, etc.):');
+  if (!key) return;
+
+  const action = prompt('Enter action (pen, highlighter, eraser, clear, toggle):');
+  if (!action) return;
+
+  const validActions = ['pen', 'highlighter', 'eraser', 'clear', 'toggle'];
+  if (!validActions.includes(action)) {
+    alert('Invalid action. Valid actions are: ' + validActions.join(', '));
+    return;
+  }
+
+  // Load current shortcuts and add new one
+  chrome.storage.sync.get(['shortcuts'], (result) => {
+    const shortcuts = result.shortcuts || {
+      'Ctrl+Shift+C': 'clear',
+      'P': 'pen',
+      'H': 'highlighter',
+      'E': 'eraser'
+    };
+
+    shortcuts[key] = action;
+
+    chrome.storage.sync.set({ shortcuts }, () => {
+      displayShortcuts(shortcuts);
+      showNotification(`Shortcut ${key} added for ${action}`);
+
+      // Notify all active tabs to update their shortcuts
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'updateShortcuts',
+            shortcuts: shortcuts
+          }).catch(() => {
+            // Ignore errors for tabs that don't have the content script
+          });
+        });
+      });
+    });
+  });
+}
+
+function deleteShortcut(key) {
+  if (!confirm(`Delete shortcut "${key}"?`)) return;
+
+  chrome.storage.sync.get(['shortcuts'], (result) => {
+    const shortcuts = result.shortcuts || {};
+    delete shortcuts[key];
+
+    chrome.storage.sync.set({ shortcuts }, () => {
+      displayShortcuts(shortcuts);
+      showNotification(`Shortcut "${key}" deleted`);
+
+      // Notify all active tabs to update their shortcuts
+      chrome.tabs.query({}, (tabs) => {
+        tabs.forEach(tab => {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'updateShortcuts',
+            shortcuts: shortcuts
+          }).catch(() => {
+            // Ignore errors for tabs that don't have the content script
+          });
+        });
+      });
+    });
   });
 }
 

@@ -125,11 +125,14 @@ document.addEventListener('DOMContentLoaded', () => {
         z-index: 1000;
       }
       .modal-content {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: rgba(250, 250, 240, 0.95);
+        backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
+        -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.1);
+        border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 12px;
         width: 90%;
         max-width: 400px;
-        color: white;
+        color: #333;
       }
       .modal-header {
         display: flex;
@@ -141,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .modal-close {
         background: none;
         border: none;
-        color: white;
+        color: #333;
         font-size: 24px;
         cursor: pointer;
         padding: 0;
@@ -176,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         background: rgba(255, 255, 255, 0.2);
         border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 4px;
-        color: white;
+        color: #333;
         padding: 6px 12px;
         font-family: monospace;
         cursor: pointer;
@@ -211,11 +214,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       .modal-btn.primary {
         background: rgba(255, 255, 255, 0.9);
-        color: #4c51bf;
+        color: #444;
       }
       .modal-btn.secondary {
         background: rgba(255, 255, 255, 0.1);
-        color: white;
+        color: #555;
         border: 1px solid rgba(255, 255, 255, 0.3);
       }
     `;
