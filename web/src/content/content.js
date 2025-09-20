@@ -353,13 +353,10 @@ class ScratchCanvas {
 
   snapToEdge() {
     const rect = this.toolbar.getBoundingClientRect();
-    const threshold = 50; // Distance from edge to trigger snap
+    const threshold = 80; // Increased threshold for easier snapping
 
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
 
     // Calculate distances to edges
     const distances = {
@@ -380,14 +377,14 @@ class ScratchCanvas {
       }
     }
 
-    // Snap to edge and rotate if needed
+    // Snap to edge with smooth animation (no class thrashing)
     if (closestEdge) {
       this.toolbarPosition = closestEdge;
-      this.positionToolbarAtEdge(closestEdge);
-
-      // Add snapped class for visual feedback
-      this.toolbar.classList.add('snapped');
-      setTimeout(() => this.toolbar.classList.remove('snapped'), 300);
+      this.toolbar.classList.remove('dragging');
+      // Use RAF to ensure layout is stable before applying the final position
+      requestAnimationFrame(() => {
+        this.positionToolbarAtEdge(closestEdge);
+      });
     }
   }
 
@@ -415,19 +412,18 @@ class ScratchCanvas {
         break;
 
       case 'left':
-        this.toolbar.style.left = '20px';
+        this.toolbar.style.left = '10px';
         this.toolbar.style.top = '50%';
         this.toolbar.style.transform = 'translateY(-50%)';
         this.toolbar.classList.add('vertical', 'edge-left');
         break;
 
       case 'right':
-        // Calculate position considering toolbar will be vertical
-        const toolbarWidth = rect.width;
-        this.toolbar.style.left = (windowWidth - toolbarWidth - 20) + 'px';
+        // Add classes first so width is accurate, then position with 10px right padding
+        this.toolbar.classList.add('vertical', 'edge-right');
+        this.toolbar.style.left = (windowWidth - this.toolbar.offsetWidth - 10) + 'px';
         this.toolbar.style.top = '50%';
         this.toolbar.style.transform = 'translateY(-50%)';
-        this.toolbar.classList.add('vertical', 'edge-right');
         break;
     }
   }
