@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Scratch",
+  "version": "1.0.0",
+  "description": "Draw on any webpage with customizable shortcuts",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Scratch - Web Drawing Tool",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "assets/scratch_logo3.png",
+    "48": "assets/scratch_logo3.png",
+    "128": "assets/scratch_logo3.png"
+  },
+  "options_page": "src/options/options.html",
+  "commands": {
+    "clear-canvas": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+C"
+      },
+      "description": "Clear all drawings"
+    }
+  }
+}
