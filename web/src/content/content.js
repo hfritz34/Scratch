@@ -5,16 +5,20 @@ class ScratchCanvas {
     this.isDraggingToolbar = false;
     this.currentTool = 'pen';
     this.currentColor = '#000000';
+    this.eraserMode = 'whole'; // 'whole' or 'partial'
     this.toolSizes = {
-      pen: 2,
+      pen: 5,
       highlighter: 15,
       eraser: 20
+    };
+    this.sizeOptions = {
+      pen: [2, 5, 8],
+      highlighter: [10, 15, 20],
+      eraser: [15, 20, 30]
     };
     this.canvas = null;
     this.ctx = null;
     this.toolbar = null;
-    this.sizeSlider = null;
-    this.sliderTimeout = null;
     this.lastX = 0;
     this.lastY = 0;
     this.shortcuts = this.loadShortcuts();
@@ -22,6 +26,14 @@ class ScratchCanvas {
     this.currentStroke = null;
     this.palettes = this.initializePalettes();
     this.currentPalette = 'simple';
+    // Hover-based activation properties
+    this.hoverTimeout = null;
+    this.hideTimeout = null;
+    this.isHoveringContent = false;
+    this.isHoveringToolbar = false;
+    // Partial eraser properties
+    this.isErasing = false;
+    this.erasePoints = [];
     this.init();
   }
 
@@ -52,7 +64,7 @@ class ScratchCanvas {
     this.canvas.style.width = '100%';
     this.canvas.style.pointerEvents = 'none';
     this.canvas.style.zIndex = '999998';
-    this.canvas.style.display = 'none';
+    this.canvas.style.display = 'none'; // Start hidden, show on hover
 
     // Set canvas size to full document size
     this.updateCanvasSize();
@@ -102,16 +114,35 @@ class ScratchCanvas {
           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
         </svg>
       </button>
+      <div class="size-buttons" data-tool="pen">
+        <button class="size-btn small" data-size="2" title="Small (2px)"></button>
+        <button class="size-btn medium active" data-size="5" title="Medium (5px)"></button>
+        <button class="size-btn large" data-size="8" title="Large (8px)"></button>
+      </div>
       <button class="tool-btn" data-tool="highlighter" title="Highlighter (H)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M11 9h5.5L11 3.5V9zM7.5 6.5C6.12 6.5 5 7.62 5 9v10.5c0 1.38 1.12 2.5 2.5 2.5h9c1.38 0 2.5-1.12 2.5-2.5V9H13V3.5h-3c-1.38 0-2.5 1.12-2.5 2.5V6.5z"/>
         </svg>
       </button>
+      <div class="size-buttons" data-tool="highlighter" style="display: none;">
+        <button class="size-btn small" data-size="10" title="Small (10px)"></button>
+        <button class="size-btn medium active" data-size="15" title="Medium (15px)"></button>
+        <button class="size-btn large" data-size="20" title="Large (20px)"></button>
+      </div>
       <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M16.24 3.56l4.95 4.94c.78.79.78 2.05 0 2.84L12 20.53a4.008 4.008 0 0 1-5.66 0L2.81 17c-.78-.79-.78-2.05 0-2.84l10.6-10.6c.79-.78 2.05-.78 2.83 0M4.22 15.58l3.54 3.53c.78.79 2.04.79 2.83 0l3.53-3.53-6.36-6.36-3.54 3.54c-.78.78-.78 2.05 0 2.82z"/>
         </svg>
       </button>
+      <div class="size-buttons" data-tool="eraser" style="display: none;">
+        <button class="size-btn small" data-size="15" title="Small (15px)"></button>
+        <button class="size-btn medium active" data-size="20" title="Medium (20px)"></button>
+        <button class="size-btn large" data-size="30" title="Large (30px)"></button>
+      </div>
+      <div class="eraser-mode-pills">
+        <button class="mode-pill active" data-mode="whole" title="Whole eraser - removes entire strokes">Whole</button>
+        <button class="mode-pill" data-mode="partial" title="Partial eraser - removes parts of strokes">Partial</button>
+      </div>
       <div class="toolbar-divider"></div>
       ${colorSwatches}
       <div class="toolbar-divider"></div>
@@ -127,72 +158,65 @@ class ScratchCanvas {
       </button>
     `;
 
-    // Position toolbar at top center initially
+    // Position toolbar at top center initially but start hidden
     this.toolbar.style.left = '50%';
     this.toolbar.style.top = '20px';
     this.toolbar.style.transform = 'translateX(-50%)';
+    this.toolbar.style.display = 'none'; // Start hidden, show on hover
     this.toolbarPosition = null; // Not snapped to edge initially
 
     document.body.appendChild(this.toolbar);
     console.log('Toolbar appended to body:', this.toolbar);
-    this.createSizeSlider();
     this.setupToolbarEvents();
     this.setupToolbarDrag();
+    this.setupHoverActivation();
   }
 
-  createSizeSlider() {
-    this.sizeSlider = document.createElement('div');
-    this.sizeSlider.id = 'size-slider';
-    this.sizeSlider.innerHTML = `
-      <div class="slider-container">
-        <span class="slider-label">Size</span>
-        <input type="range" class="size-range" min="1" max="50" value="2">
-        <span class="slider-value">2px</span>
-      </div>
-    `;
-    this.sizeSlider.style.display = 'none';
-    document.body.appendChild(this.sizeSlider);
-
-    const slider = this.sizeSlider.querySelector('.size-range');
-    const valueDisplay = this.sizeSlider.querySelector('.slider-value');
-
-    slider.addEventListener('input', (e) => {
-      const size = parseInt(e.target.value);
-      this.toolSizes[this.currentTool] = size;
-      valueDisplay.textContent = size + 'px';
-      this.resetSliderTimeout();
-    });
-
-    // Hide slider when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('#size-slider') && !e.target.closest('.tool-btn')) {
-        this.hideSizeSlider();
-      }
-    });
-  }
 
   setupToolbarEvents() {
-    // Tool selection with hover-based size slider
+    // Tool selection and size button management
     this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
       // Click to select tool
       btn.addEventListener('click', (e) => {
         const tool = e.currentTarget.dataset.tool;
         this.setTool(tool);
       });
+    });
 
-      // Hover to show size slider for current tool
-      btn.addEventListener('mouseenter', (e) => {
-        const tool = e.currentTarget.dataset.tool;
-        if (tool === this.currentTool && ['pen', 'highlighter', 'eraser'].includes(tool)) {
-          this.showSizeSlider(e.currentTarget);
+    // Size button events
+    this.toolbar.querySelectorAll('.size-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const size = parseInt(e.currentTarget.dataset.size);
+        const sizeGroup = e.currentTarget.closest('.size-buttons');
+        const tool = sizeGroup.dataset.tool;
+
+        // Update tool size
+        this.toolSizes[tool] = size;
+
+        // Update active state
+        sizeGroup.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+
+        // Update cursor if this is the current tool
+        if (tool === this.currentTool) {
+          this.updateCursor();
         }
+
+        console.log(`Updated ${tool} size to ${size}px`);
       });
+    });
 
-      btn.addEventListener('mouseleave', (e) => {
-        const tool = e.currentTarget.dataset.tool;
-        if (tool === this.currentTool && ['pen', 'highlighter', 'eraser'].includes(tool)) {
-          this.resetSliderTimeout();
-        }
+    // Mode pill events (for eraser modes)
+    this.toolbar.querySelectorAll('.mode-pill').forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        const mode = e.currentTarget.dataset.mode;
+        this.eraserMode = mode;
+
+        // Update active state
+        this.toolbar.querySelectorAll('.mode-pill').forEach(p => p.classList.remove('active'));
+        e.currentTarget.classList.add('active');
+
+        console.log(`Eraser mode set to: ${mode}`);
       });
     });
 
@@ -490,8 +514,247 @@ class ScratchCanvas {
     });
     this.toolbar.querySelector(`[data-tool="${tool}"]`).classList.add('active');
 
+    // Show/hide appropriate size buttons
+    this.toolbar.querySelectorAll('.size-buttons').forEach(sizeGroup => {
+      if (sizeGroup.dataset.tool === tool) {
+        sizeGroup.style.display = 'flex';
+      } else {
+        sizeGroup.style.display = 'none';
+      }
+    });
+
+    // Show/hide eraser mode pills
+    const eraserModePills = this.toolbar.querySelector('.eraser-mode-pills');
+    if (eraserModePills) {
+      if (tool === 'eraser') {
+        eraserModePills.classList.add('visible');
+      } else {
+        eraserModePills.classList.remove('visible');
+      }
+    }
+
     // Update cursor
     this.updateCursor();
+  }
+
+  setupHoverActivation() {
+    // Setup hover detection for content areas
+    document.addEventListener('mousemove', (e) => this.handleContentHover(e));
+
+    // Setup hover detection for toolbar
+    this.toolbar.addEventListener('mouseenter', () => {
+      this.isHoveringToolbar = true;
+      this.clearHideTimeout();
+    });
+
+    this.toolbar.addEventListener('mouseleave', () => {
+      this.isHoveringToolbar = false;
+      this.checkShouldHide();
+    });
+  }
+
+  handleContentHover(e) {
+    // Don't activate on toolbar or other UI elements
+    if (e.target.closest('#scratch-toolbar') || e.target.closest('#scratch-canvas')) {
+      return;
+    }
+
+    // Check if hovering over content areas (not UI elements)
+    const isContentArea = !e.target.closest('button') &&
+                         !e.target.closest('input') &&
+                         !e.target.closest('select') &&
+                         !e.target.closest('textarea') &&
+                         !e.target.closest('nav') &&
+                         !e.target.closest('header') &&
+                         !e.target.closest('.menu') &&
+                         !e.target.closest('[role="button"]') &&
+                         !e.target.closest('[role="menu"]');
+
+    if (isContentArea && !this.isHoveringContent) {
+      this.isHoveringContent = true;
+      this.startHoverActivation();
+    } else if (!isContentArea && this.isHoveringContent) {
+      this.isHoveringContent = false;
+      this.checkShouldHide();
+    }
+  }
+
+  startHoverActivation() {
+    // Clear any existing hide timeout
+    this.clearHideTimeout();
+
+    // Start hover timeout for activation
+    if (this.hoverTimeout) {
+      clearTimeout(this.hoverTimeout);
+    }
+
+    this.hoverTimeout = setTimeout(() => {
+      if (this.isHoveringContent && !this.isActive) {
+        this.activateDrawingMode();
+      }
+    }, 500); // 500ms delay as requested
+  }
+
+  checkShouldHide() {
+    if (!this.isHoveringContent && !this.isHoveringToolbar && this.isActive) {
+      this.startHideTimeout();
+    }
+  }
+
+  startHideTimeout() {
+    this.clearHideTimeout();
+    this.hideTimeout = setTimeout(() => {
+      if (!this.isHoveringContent && !this.isHoveringToolbar && this.isActive) {
+        this.deactivateDrawingMode();
+      }
+    }, 1000); // Hide after 1 second of no hover
+  }
+
+  clearHideTimeout() {
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+  }
+
+  activateDrawingMode() {
+    if (!this.isActive) {
+      this.isActive = true;
+      console.log('Hover-activated drawing mode');
+      this.canvas.style.display = 'block';
+      this.canvas.style.pointerEvents = 'auto';
+      this.toolbar.style.display = 'flex';
+      this.setTool('pen');
+      this.updateCursor();
+      this.keepToolbarInBounds();
+    }
+  }
+
+  deactivateDrawingMode() {
+    if (this.isActive) {
+      this.isActive = false;
+      console.log('Hover-deactivated drawing mode');
+      this.canvas.style.display = 'none';
+      this.canvas.style.pointerEvents = 'none';
+      this.toolbar.style.display = 'none';
+      this.canvas.style.cursor = 'default';
+    }
+  }
+
+  startPartialErase(x, y) {
+    // Initialize partial eraser mode
+    this.isErasing = true;
+    this.erasePoints = [{x, y}];
+    console.log('Started partial erase mode');
+  }
+
+  partialErase(x, y) {
+    if (!this.isErasing) return;
+
+    // Add point to erase path
+    this.erasePoints.push({x, y});
+
+    // Find strokes that intersect with the erase path
+    const eraserSize = this.toolSizes.eraser;
+    const strokesToModify = [];
+
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      if (!stroke || !stroke.points || stroke.points.length === 0) continue;
+
+      // Check if any part of this stroke intersects with the erase path
+      const intersectedPointIndices = [];
+
+      for (let j = 0; j < stroke.points.length; j++) {
+        const strokePoint = stroke.points[j];
+
+        // Check if this stroke point is within eraser range of any erase point
+        for (const erasePoint of this.erasePoints) {
+          const distance = Math.sqrt(
+            (strokePoint.x - erasePoint.x) ** 2 +
+            (strokePoint.y - erasePoint.y) ** 2
+          );
+
+          if (distance <= eraserSize / 2) {
+            intersectedPointIndices.push(j);
+            break;
+          }
+        }
+      }
+
+      if (intersectedPointIndices.length > 0) {
+        strokesToModify.push({strokeIndex: i, pointIndices: intersectedPointIndices});
+      }
+    }
+
+    // Split strokes at intersected points
+    this.splitStrokesAtPoints(strokesToModify);
+
+    // Redraw canvas
+    this.redrawCanvas();
+  }
+
+  splitStrokesAtPoints(strokesToModify) {
+    // Process strokes in reverse order to maintain indices
+    for (let i = strokesToModify.length - 1; i >= 0; i--) {
+      const {strokeIndex, pointIndices} = strokesToModify[i];
+      const originalStroke = this.strokes[strokeIndex];
+
+      if (!originalStroke || pointIndices.length === 0) continue;
+
+      // Sort point indices
+      pointIndices.sort((a, b) => a - b);
+
+      // Create new stroke segments
+      const newStrokes = [];
+      let lastEnd = 0;
+
+      for (const pointIndex of pointIndices) {
+        // Create stroke from lastEnd to pointIndex (excluding the erased point)
+        if (pointIndex > lastEnd) {
+          const segmentPoints = originalStroke.points.slice(lastEnd, pointIndex);
+          if (segmentPoints.length > 1) {
+            newStrokes.push({
+              ...originalStroke,
+              points: segmentPoints,
+              bounds: this.calculateStrokeBounds(segmentPoints)
+            });
+          }
+        }
+        lastEnd = pointIndex + 1;
+      }
+
+      // Add final segment if there are remaining points
+      if (lastEnd < originalStroke.points.length) {
+        const segmentPoints = originalStroke.points.slice(lastEnd);
+        if (segmentPoints.length > 1) {
+          newStrokes.push({
+            ...originalStroke,
+            points: segmentPoints,
+            bounds: this.calculateStrokeBounds(segmentPoints)
+          });
+        }
+      }
+
+      // Replace the original stroke with new segments
+      this.strokes.splice(strokeIndex, 1, ...newStrokes);
+    }
+  }
+
+  calculateStrokeBounds(points) {
+    if (points.length === 0) return {minX: 0, maxX: 0, minY: 0, maxY: 0};
+
+    let minX = points[0].x, maxX = points[0].x;
+    let minY = points[0].y, maxY = points[0].y;
+
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    return {minX, maxX, minY, maxY};
   }
 
   updateCursor() {
@@ -546,48 +809,6 @@ class ScratchCanvas {
     this.updateCursor();
   }
 
-  showSizeSlider(toolButton) {
-    const rect = toolButton.getBoundingClientRect();
-    const toolbarRect = this.toolbar.getBoundingClientRect();
-
-    // Update slider value for current tool
-    const slider = this.sizeSlider.querySelector('.size-range');
-    const valueDisplay = this.sizeSlider.querySelector('.slider-value');
-    const currentSize = this.toolSizes[this.currentTool];
-
-    slider.value = currentSize;
-    valueDisplay.textContent = currentSize + 'px';
-
-    // Set max value based on tool
-    const maxValues = { pen: 20, highlighter: 40, eraser: 50 };
-    slider.max = maxValues[this.currentTool] || 20;
-
-    // Position slider near the tool button
-    this.sizeSlider.style.position = 'fixed';
-    this.sizeSlider.style.left = rect.left + 'px';
-    this.sizeSlider.style.top = (rect.bottom + 8) + 'px';
-    this.sizeSlider.style.display = 'block';
-    this.sizeSlider.style.zIndex = '1000000';
-
-    this.resetSliderTimeout();
-  }
-
-  hideSizeSlider() {
-    this.sizeSlider.style.display = 'none';
-    if (this.sliderTimeout) {
-      clearTimeout(this.sliderTimeout);
-      this.sliderTimeout = null;
-    }
-  }
-
-  resetSliderTimeout() {
-    if (this.sliderTimeout) {
-      clearTimeout(this.sliderTimeout);
-    }
-    this.sliderTimeout = setTimeout(() => {
-      this.hideSizeSlider();
-    }, 2000); // Hide after 2 seconds of inactivity
-  }
 
   setupEventListeners() {
     let resizeTimeout;
@@ -657,9 +878,15 @@ class ScratchCanvas {
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
     if (this.currentTool === 'eraser') {
-      // Whole eraser: detect and remove strokes at click point
-      this.wholeErase(e.pageX, e.pageY);
-      return;
+      if (this.eraserMode === 'whole') {
+        // Whole eraser: detect and remove strokes at click point
+        this.wholeErase(e.pageX, e.pageY);
+        return;
+      } else {
+        // Partial eraser: start erasing mode
+        this.startPartialErase(e.pageX, e.pageY);
+        // Don't return, let it continue to drawing logic for continuous erasing
+      }
     }
 
     this.isDrawing = true;
@@ -683,6 +910,12 @@ class ScratchCanvas {
 
   handleMouseMove(e) {
     if (!this.isActive || !this.isDrawing) return;
+
+    // Handle partial erasing
+    if (this.currentTool === 'eraser' && this.eraserMode === 'partial' && this.isErasing) {
+      this.partialErase(e.pageX, e.pageY);
+      return;
+    }
 
     // Add point to current stroke
     if (this.currentStroke) {
@@ -724,9 +957,19 @@ class ScratchCanvas {
   }
 
   handleMouseUp(e) {
+    // End partial erasing
+    if (this.isErasing) {
+      this.isErasing = false;
+      this.erasePoints = [];
+      console.log('Ended partial erase mode');
+    }
+
     if (this.isDrawing && this.currentStroke) {
-      // Save completed stroke
-      this.strokes.push(this.currentStroke);
+      // Only save stroke if it has points
+      if (this.currentStroke.points.length > 0) {
+        this.strokes.push(this.currentStroke);
+        console.log(`Saved stroke with ${this.currentStroke.points.length} points`);
+      }
       this.currentStroke = null;
     }
     this.isDrawing = false;
@@ -837,18 +1080,31 @@ class ScratchCanvas {
   }
 
   wholeErase(x, y) {
+    // Validate input coordinates
+    if (typeof x !== 'number' || typeof y !== 'number' || !isFinite(x) || !isFinite(y)) {
+      console.warn('Invalid coordinates for eraser:', x, y);
+      return;
+    }
+
     // Find strokes that contain the click point
     const strokesToRemove = [];
 
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
 
+      // Validate stroke data
+      if (!stroke || !stroke.bounds || !stroke.points || stroke.points.length === 0) {
+        continue;
+      }
+
+      // Improved padding calculation based on stroke size
+      const padding = Math.max(stroke.size || 15, 15); // Minimum 15px padding for easier selection
+
       // Quick bounds check first
-      const padding = stroke.size / 2 + 5; // Add padding for easier selection
       if (x >= stroke.bounds.minX - padding && x <= stroke.bounds.maxX + padding &&
           y >= stroke.bounds.minY - padding && y <= stroke.bounds.maxY + padding) {
 
-        // Check if point is near any line segment in the stroke
+        // Check if point is near any part of the stroke
         if (this.isPointNearStroke(x, y, stroke)) {
           strokesToRemove.push(i);
         }
@@ -860,15 +1116,29 @@ class ScratchCanvas {
       this.strokes.splice(strokesToRemove[i], 1);
     }
 
-    // Redraw canvas if strokes were removed
+    // Always redraw canvas to ensure proper state
+    this.redrawCanvas();
+
+    // Log for debugging
     if (strokesToRemove.length > 0) {
-      this.redrawCanvas();
+      console.log(`Erased ${strokesToRemove.length} stroke(s) at (${x}, ${y})`);
+    } else {
+      console.log(`No strokes found to erase at (${x}, ${y})`);
     }
   }
 
   isPointNearStroke(x, y, stroke) {
-    const threshold = stroke.size / 2 + 8; // Tolerance for click detection
+    // Improved threshold calculation for better detection
+    const threshold = Math.max(stroke.size / 2 + 10, 12); // Minimum 12px threshold
 
+    // Handle single point strokes (dots)
+    if (stroke.points.length === 1) {
+      const p = stroke.points[0];
+      const distance = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+      return distance <= threshold;
+    }
+
+    // Check line segments for multi-point strokes
     for (let i = 0; i < stroke.points.length - 1; i++) {
       const p1 = stroke.points[i];
       const p2 = stroke.points[i + 1];
@@ -878,6 +1148,15 @@ class ScratchCanvas {
         return true;
       }
     }
+
+    // Additional check for stroke endpoints (helps with very short strokes)
+    for (const point of stroke.points) {
+      const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
+      if (distance <= threshold) {
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -917,7 +1196,8 @@ class ScratchCanvas {
   }
 
   drawStroke(stroke) {
-    if (stroke.points.length < 2) return;
+    // Validate stroke data
+    if (!stroke || !stroke.points || stroke.points.length === 0) return;
 
     if (stroke.tool === 'highlighter') {
       this.ctx.globalCompositeOperation = 'multiply';
@@ -927,18 +1207,25 @@ class ScratchCanvas {
       this.ctx.strokeStyle = stroke.color;
     }
 
-    this.ctx.lineWidth = stroke.size;
+    this.ctx.lineWidth = stroke.size || 2;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
 
     this.ctx.beginPath();
-    this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
 
-    for (let i = 1; i < stroke.points.length; i++) {
-      this.ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    if (stroke.points.length === 1) {
+      // Handle single point as a dot
+      const point = stroke.points[0];
+      this.ctx.arc(point.x, point.y, (stroke.size || 2) / 2, 0, 2 * Math.PI);
+      this.ctx.fill();
+    } else {
+      // Handle multiple points as a line
+      this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        this.ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+      this.ctx.stroke();
     }
-
-    this.ctx.stroke();
   }
 
   clearCanvas() {
