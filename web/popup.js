@@ -277,7 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="modal-body">
           <div class="about-content">
-            <p>Hi, my name is Henry. I like to build things. Thanks for using Scratch!</p>
+            <p>hi my name is Henry! i love building things.</p>
+            <img src="assets/lovely.PNG" alt="Lovely" class="yep-image">
+            <p>Thank you so much for using Scratch!</p>
+            <p class="social-header">Follow my socials here:</p>
             <div class="social-links">
               <a href="https://www.henryfritz.com/" target="_blank" class="social-link">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -355,9 +358,21 @@ document.addEventListener('DOMContentLoaded', () => {
         text-align: center;
       }
       .about-content p {
-        margin-bottom: 20px;
+        margin-bottom: 16px;
         line-height: 1.5;
         font-size: 14px;
+      }
+      .yep-image {
+        width: 120px;
+        height: 80px;
+        margin: 16px 0;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      }
+      .social-header {
+        font-weight: 600;
+        margin-bottom: 12px !important;
+        margin-top: 8px;
       }
       .social-links {
         display: flex;
