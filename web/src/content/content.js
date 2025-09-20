@@ -737,18 +737,37 @@ class ScratchCanvas {
     e.preventDefault();
 
     const now = Date.now();
+
+    // Double right-click to clear canvas
     if (this.lastRightClick && now - this.lastRightClick < 300) {
       this.clearCanvas();
-    } else {
-      const previousTool = this.currentTool;
-      this.currentTool = 'eraser';
+      this.lastRightClick = null; // Reset to prevent triple-click issues
+      return;
+    }
 
-      const revertTool = () => {
-        this.currentTool = previousTool;
-        document.removeEventListener('mouseup', revertTool);
+    // Single right-click to temporarily switch to eraser
+    if (this.currentTool !== 'eraser') {
+      this.previousTool = this.currentTool;
+      this.setTool('eraser');
+
+      // Set up listener to revert tool on mouse up
+      const revertTool = (mouseEvent) => {
+        // Only revert if we're not still right-clicking
+        if (mouseEvent.button !== 2) {
+          this.setTool(this.previousTool);
+          this.previousTool = null;
+          document.removeEventListener('mouseup', revertTool);
+          document.removeEventListener('contextmenu', preventContext);
+        }
+      };
+
+      // Prevent context menu during eraser mode
+      const preventContext = (contextEvent) => {
+        contextEvent.preventDefault();
       };
 
       document.addEventListener('mouseup', revertTool);
+      document.addEventListener('contextmenu', preventContext);
     }
 
     this.lastRightClick = now;
@@ -937,18 +956,22 @@ class ScratchCanvas {
 
   initializePalettes() {
     return {
-      simple: ['#000000', '#FF0000', '#0000FF', '#00FF00', '#FFFF00'],
-      blu: ['#001F3F', '#0074D9', '#7FDBFF', '#39CCCC', '#2ECC40'],
-      cambridge: ['#2E4057', '#048A81', '#54C6EB', '#F18F01', '#C73E1D'],
-      dream: ['#F72585', '#B5179E', '#7209B7', '#480CA8', '#3A0CA3'],
-      eclipse: ['#011627', '#FDFFFC', '#2EC4B6', '#E71D36', '#FF9F1C'],
-      fairytale: ['#F72585', '#4CC9F0', '#7209B7', '#560BAD', '#480CA8'],
-      go: ['#FF6B35', '#F7931E', '#FFD23F', '#06FFA5', '#118AB2'],
-      incorrect: ['#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'],
-      metropark: ['#264653', '#2A9D8F', '#E9C46A', '#F4A261', '#E76F51'],
-      rebecca: ['#2F1B69', '#A288A6', '#FFFFFF', '#F0E68C', '#FF6B6B'],
-      remember: ['#8D5524', '#C68642', '#E0AC69', '#F1C27D', '#FFDBAC'],
-      stung: ['#F72585', '#B5179E', '#7209B7', '#480CA8', '#3A0CA3']
+      simple: ['#474448', '#2D232E', '#E0DDCF', '#534B52', '#F1F0EA'],
+      blu: ['#03256C', '#2541B2', '#1768AC', '#06BEE1', '#FFFFFF'],
+      cambridge: ['#555B6E', '#89B0AE', '#BEE3DB', '#FAF9F9', '#FFD6BA'],
+      dream: ['#8895B3', '#8E94F2', '#9FA0FF', '#BBADFF', '#DAB6FC'],
+      eclipse: ['#485696', '#E7E7E7', '#F9C784', '#FC7A1E', '#F24C00'],
+      fairytale: ['#392F5A', '#F092DD', '#FFAFF0', '#EEC8E0', '#A8C7BB'],
+      go: ['#395E66', '#387D7A', '#32936F', '#26A96C', '#2BC016'],
+      incorrect: ['#273043', '#9197AE', '#EFF6EE', '#F02D3A', '#DD0426'],
+      metropark: ['#2589BD', '#187795', '#38686A', '#A3B4A2', '#CDC6AE'],
+      rebecca: ['#E5D4ED', '#6D72C3', '#5941A9', '#514F59', '#1D1128'],
+      remember: ['#1B264F', '#274690', '#576CA8', '#302B27', '#F5F3F5'],
+      stung: ['#2D2A32', '#DDD92A', '#EAE151', '#EEEFA8', '#FAFDF6'],
+      wish: ['#EF476F', '#FFD166', '#06D6A0', '#118AB2', '#073B4C'],
+      untitled: ['#100007', '#200116', '#2D0605', '#4C0827', '#80D39B'],
+      lonely: ['#223127', '#9C0D38', '#CE5374', '#DBBBF5', '#DDF0FF'],
+      window: ['#FE5F55', '#F0B67F', '#D6D1B1', '#C7EFCF', '#EEF5DB']
     };
   }
 
