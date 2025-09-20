@@ -277,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         <div class="modal-body">
           <div class="about-content">
-            <p>hi my name is Henry! i love building things.</p>
+            <p>hi my name is Henry!</p>
             <img src="assets/lovely.PNG" alt="Lovely" class="yep-image">
             <p>Thank you so much for using Scratch!</p>
             <p class="social-header">Follow my socials here:</p>

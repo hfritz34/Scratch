@@ -46,10 +46,32 @@ class ScratchCanvas {
     this.isEraserDeleteMode = false;
     this.eraserDeleteStrokes = new Set();
     this.isEraserDeleting = false;
+
+    // Performance optimizations
+    this.performanceMode = false;
+    this.maxStrokes = 500; // Limit stroke history
+    this.heavyDomains = ['youtube.com', 'instagram.com', 'facebook.com', 'twitter.com', 'x.com'];
+
+    // Viewport rendering properties
+    this.viewportPadding = 500; // Extra padding around viewport for stroke rendering
+    this.renderRequestId = null;
+    this.lastScrollX = 0;
+    this.lastScrollY = 0;
+
     this.init();
   }
 
   init() {
+    // Check if we're on a heavy page for performance mode
+    const hostname = window.location.hostname;
+    this.performanceMode = this.heavyDomains.some(domain =>
+      hostname.includes(domain)
+    );
+
+    if (this.performanceMode) {
+      console.log('Scratch: Performance mode enabled for', hostname);
+    }
+
     // Wait for DOM to be ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
@@ -89,31 +111,49 @@ class ScratchCanvas {
     const body = document.body;
     const html = document.documentElement;
 
-    // Get the full document dimensions including scrollable area
-    const height = Math.max(
+    // Get document dimensions but with performance limits
+    let height = Math.max(
       body.scrollHeight, body.offsetHeight,
       html.clientHeight, html.scrollHeight, html.offsetHeight,
       window.innerHeight + window.pageYOffset
     );
-    const width = Math.max(
+    let width = Math.max(
       body.scrollWidth, body.offsetWidth,
       html.clientWidth, html.scrollWidth, html.offsetWidth,
       window.innerWidth + window.pageXOffset
     );
 
-    // Set canvas size to cover entire document
+    // Performance optimization: limit canvas size on heavy pages
+    if (this.performanceMode) {
+      const maxWidth = window.innerWidth * 3;
+      const maxHeight = window.innerHeight * 5;
+      width = Math.min(width, maxWidth);
+      height = Math.min(height, maxHeight);
+    }
+
+    // Avoid unnecessary resizes
+    if (this.canvas.width === width && this.canvas.height === height) {
+      return;
+    }
+
+    // Set canvas size
     this.canvas.width = width;
     this.canvas.height = height;
     this.canvas.style.width = width + 'px';
     this.canvas.style.height = height + 'px';
 
-    console.log('Canvas size updated:', width, 'x', height);
+    console.log('Canvas size updated:', width, 'x', height, this.performanceMode ? '(performance limited)' : '');
   }
 
   createToolbar() {
     console.log('Creating toolbar...');
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'scratch-toolbar';
+
+    // Add performance mode class if needed
+    if (this.performanceMode) {
+      this.toolbar.classList.add('performance-mode');
+    }
     const colors = this.getCurrentPaletteColors();
     const colorSwatches = colors.map((color, index) =>
       `<div class="color-swatch ${index === 0 ? 'active' : ''}" data-color="${color}" style="background-color: ${color};" title="Color ${index + 1}"></div>`
@@ -168,6 +208,7 @@ class ScratchCanvas {
           <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
         </svg>
       </button>
+      ${this.performanceMode ? '<span class="perf-indicator" title="Performance mode active">⚡</span>' : ''}
     `;
 
     // Position toolbar at top center initially but start hidden
@@ -761,6 +802,8 @@ class ScratchCanvas {
       this.setTool('pen');
       this.updateCursor();
       this.keepToolbarInBounds();
+      // Redraw any existing strokes
+      this.redrawCanvas();
     }
   }
 
@@ -900,26 +943,29 @@ class ScratchCanvas {
     let cursorSvg = '';
 
     if (this.currentTool === 'pen') {
-      // Pen cursor with color dot
+      // Pen cursor with color dot - ensure perfect center alignment
       cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <circle cx="16" cy="16" r="8" fill="${color}" stroke="white" stroke-width="2"/>
         <circle cx="16" cy="16" r="2" fill="white"/>
+        <circle cx="16" cy="16" r="0.5" fill="rgba(0,0,0,0.3)"/>
         <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     } else if (this.currentTool === 'highlighter') {
-      // Highlighter cursor with transparent color
+      // Highlighter cursor with transparent color - ensure perfect center alignment
       const rgba = this.hexToRgba(color, 0.3);
       cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <rect x="8" y="8" width="16" height="16" fill="${rgba}" stroke="white" stroke-width="2"/>
         <circle cx="16" cy="16" r="2" fill="black"/>
+        <circle cx="16" cy="16" r="0.5" fill="white"/>
         <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     } else if (this.currentTool === 'eraser') {
-      // Eraser cursor
+      // Eraser cursor - ensure perfect center alignment
       cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
         <circle cx="16" cy="16" r="10" fill="none" stroke="red" stroke-width="3"/>
         <line x1="10" y1="16" x2="22" y2="16" stroke="red" stroke-width="2"/>
         <line x1="16" y1="10" x2="16" y2="22" stroke="red" stroke-width="2"/>
+        <circle cx="16" cy="16" r="1" fill="red"/>
         <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
     }
@@ -984,6 +1030,11 @@ class ScratchCanvas {
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         this.resizeCanvas(); // Use resizeCanvas which preserves strokes
+
+        // Cleanup distant strokes periodically when scrolling (performance mode only)
+        if (this.performanceMode) {
+          this.cleanupDistantStrokes();
+        }
       }, 100);
     }, { passive: true });
 
@@ -1029,6 +1080,8 @@ class ScratchCanvas {
       this.updateCursor();
       // Ensure toolbar is in bounds when first shown
       this.keepToolbarInBounds();
+      // Redraw any existing strokes
+      this.redrawCanvas();
     } else {
       this.canvas.style.cursor = 'default';
     }
@@ -1059,20 +1112,21 @@ class ScratchCanvas {
     }
 
     this.isDrawing = true;
-    this.lastX = e.pageX;
-    this.lastY = e.pageY;
+    // Ensure precise positioning at cursor center
+    this.lastX = Math.round(e.pageX);
+    this.lastY = Math.round(e.pageY);
 
-    // Start new stroke tracking
+    // Start new stroke tracking with precise coordinates
     this.currentStroke = {
       tool: this.currentTool,
       color: this.currentColor,
       size: this.toolSizes[this.currentTool],
-      points: [{ x: e.pageX, y: e.pageY }],
+      points: [{ x: this.lastX, y: this.lastY }],
       bounds: {
-        minX: e.pageX,
-        maxX: e.pageX,
-        minY: e.pageY,
-        maxY: e.pageY
+        minX: this.lastX,
+        maxX: this.lastX,
+        minY: this.lastY,
+        maxY: this.lastY
       }
     };
   }
@@ -1089,33 +1143,38 @@ class ScratchCanvas {
       return;
     }
 
+    // Use precise rounded coordinates for consistent positioning
+    const currentX = Math.round(e.pageX);
+    const currentY = Math.round(e.pageY);
+
     // Add point to current stroke
     if (this.currentStroke) {
-      this.currentStroke.points.push({ x: e.pageX, y: e.pageY });
+      this.currentStroke.points.push({ x: currentX, y: currentY });
 
       // Update stroke bounds
-      this.currentStroke.bounds.minX = Math.min(this.currentStroke.bounds.minX, e.pageX);
-      this.currentStroke.bounds.maxX = Math.max(this.currentStroke.bounds.maxX, e.pageX);
-      this.currentStroke.bounds.minY = Math.min(this.currentStroke.bounds.minY, e.pageY);
-      this.currentStroke.bounds.maxY = Math.max(this.currentStroke.bounds.maxY, e.pageY);
+      this.currentStroke.bounds.minX = Math.min(this.currentStroke.bounds.minX, currentX);
+      this.currentStroke.bounds.maxX = Math.max(this.currentStroke.bounds.maxX, currentX);
+      this.currentStroke.bounds.minY = Math.min(this.currentStroke.bounds.minY, currentY);
+      this.currentStroke.bounds.maxY = Math.max(this.currentStroke.bounds.maxY, currentY);
     }
 
+    // Draw directly on canvas using document coordinates (no viewport offset needed)
     if (this.currentTool === 'highlighter') {
-      // Use multiply blending for proper highlighter effect
-      this.ctx.globalCompositeOperation = 'multiply';
-      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, 0.4);
+      // Use multiply blending for proper highlighter effect (unless in performance mode)
+      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
+      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, this.performanceMode ? 0.2 : 0.4);
       this.ctx.lineWidth = this.toolSizes.highlighter;
       this.ctx.lineCap = 'round';
       this.ctx.lineJoin = 'round';
 
       this.ctx.beginPath();
       this.ctx.moveTo(this.lastX, this.lastY);
-      this.ctx.lineTo(e.pageX, e.pageY);
+      this.ctx.lineTo(currentX, currentY);
       this.ctx.stroke();
     } else if (this.currentTool === 'pen') {
       this.ctx.beginPath();
       this.ctx.moveTo(this.lastX, this.lastY);
-      this.ctx.lineTo(e.pageX, e.pageY);
+      this.ctx.lineTo(currentX, currentY);
 
       this.ctx.strokeStyle = this.currentColor;
       this.ctx.lineWidth = this.toolSizes.pen;
@@ -1124,8 +1183,8 @@ class ScratchCanvas {
       this.ctx.stroke();
     }
 
-    this.lastX = e.pageX;
-    this.lastY = e.pageY;
+    this.lastX = currentX;
+    this.lastY = currentY;
   }
 
   handleMouseUp(e) {
@@ -1143,6 +1202,12 @@ class ScratchCanvas {
       // Only save stroke if it has points
       if (this.currentStroke.points.length > 0) {
         this.strokes.push(this.currentStroke);
+
+        // Performance optimization: Enforce stroke limit
+        if (this.strokes.length > this.maxStrokes) {
+          this.strokes.splice(0, this.strokes.length - this.maxStrokes);
+        }
+
         console.log(`Saved stroke with ${this.currentStroke.points.length} points`);
       }
       this.currentStroke = null;
@@ -1623,6 +1688,119 @@ class ScratchCanvas {
     this.updateCanvasSize();
     this.strokes = currentStrokes;
     this.redrawCanvas();
+  }
+
+  // Render only strokes visible in current viewport
+  renderVisibleStrokes() {
+    // Cancel any pending render
+    if (this.renderRequestId) {
+      cancelAnimationFrame(this.renderRequestId);
+    }
+
+    this.renderRequestId = requestAnimationFrame(() => {
+      // Clear canvas
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+      // Get current scroll position
+      const scrollX = window.pageXOffset;
+      const scrollY = window.pageYOffset;
+
+      // Calculate viewport bounds in document coordinates
+      const viewportBounds = {
+        left: scrollX - this.viewportPadding,
+        right: scrollX + window.innerWidth + this.viewportPadding,
+        top: scrollY - this.viewportPadding,
+        bottom: scrollY + window.innerHeight + this.viewportPadding
+      };
+
+      // Only render strokes that intersect with viewport
+      for (const stroke of this.strokes) {
+        if (!stroke || !stroke.bounds) continue;
+
+        // Check if stroke bounds intersect with viewport bounds
+        if (stroke.bounds.maxX < viewportBounds.left ||
+            stroke.bounds.minX > viewportBounds.right ||
+            stroke.bounds.maxY < viewportBounds.top ||
+            stroke.bounds.minY > viewportBounds.bottom) {
+          continue; // Skip strokes outside viewport
+        }
+
+        // Render stroke with viewport offset
+        this.drawStrokeWithOffset(stroke, scrollX, scrollY);
+      }
+
+      this.renderRequestId = null;
+    });
+  }
+
+  // Draw stroke on viewport canvas with scroll offset
+  drawStrokeWithOffset(stroke, scrollX, scrollY) {
+    if (!stroke || !stroke.points || stroke.points.length === 0) return;
+
+    if (stroke.tool === 'highlighter') {
+      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
+      this.ctx.strokeStyle = this.hexToRgba(stroke.color, this.performanceMode ? 0.2 : 0.4);
+    } else {
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.strokeStyle = stroke.color;
+    }
+
+    this.ctx.lineWidth = stroke.size || 2;
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+
+    this.ctx.beginPath();
+
+    if (stroke.points.length === 1) {
+      // Handle single point as a dot
+      const point = stroke.points[0];
+      const canvasX = point.x - scrollX;
+      const canvasY = point.y - scrollY;
+      this.ctx.arc(canvasX, canvasY, (stroke.size || 2) / 2, 0, 2 * Math.PI);
+      this.ctx.fill();
+    } else {
+      // Handle multiple points as a line
+      const firstPoint = stroke.points[0];
+      this.ctx.moveTo(firstPoint.x - scrollX, firstPoint.y - scrollY);
+
+      for (let i = 1; i < stroke.points.length; i++) {
+        const point = stroke.points[i];
+        this.ctx.lineTo(point.x - scrollX, point.y - scrollY);
+      }
+      this.ctx.stroke();
+    }
+  }
+
+  // Clean up strokes that are very far from current viewport
+  cleanupDistantStrokes() {
+    if (!this.performanceMode) return; // Only cleanup in performance mode
+
+    const scrollX = window.pageXOffset;
+    const scrollY = window.pageYOffset;
+    const cleanupDistance = this.viewportPadding * 4; // 4x viewport padding
+
+    const viewportBounds = {
+      left: scrollX - cleanupDistance,
+      right: scrollX + window.innerWidth + cleanupDistance,
+      top: scrollY - cleanupDistance,
+      bottom: scrollY + window.innerHeight + cleanupDistance
+    };
+
+    // Remove strokes that are completely outside the cleanup bounds
+    const originalLength = this.strokes.length;
+    this.strokes = this.strokes.filter(stroke => {
+      if (!stroke || !stroke.bounds) return true;
+
+      // Keep stroke if it intersects with cleanup bounds
+      return !(stroke.bounds.maxX < viewportBounds.left ||
+               stroke.bounds.minX > viewportBounds.right ||
+               stroke.bounds.maxY < viewportBounds.top ||
+               stroke.bounds.minY > viewportBounds.bottom);
+    });
+
+    if (this.strokes.length < originalLength) {
+      console.log(`Cleaned up ${originalLength - this.strokes.length} distant strokes`);
+    }
   }
 
   initializePalettes() {
