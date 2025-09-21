@@ -47,6 +47,16 @@ class ScratchCanvas {
     this.eraserDeleteStrokes = new Set();
     this.isEraserDeleting = false;
 
+    // Select tool properties
+    this.isSelecting = false;
+    this.selectionPath = [];
+    this.selectedStrokes = new Set();
+    this.selectionBounds = null;
+    this.isDraggingSelection = false;
+    this.dragStartX = 0;
+    this.dragStartY = 0;
+    this.originalStrokePositions = new Map();
+
     // Performance optimizations
     this.performanceMode = false;
     this.maxStrokes = 500; // Limit stroke history
@@ -195,6 +205,11 @@ class ScratchCanvas {
         <button class="mode-pill active" data-mode="whole" title="Whole eraser - removes entire strokes">Whole</button>
         <button class="mode-pill" data-mode="partial" title="Partial eraser - removes parts of strokes">Partial</button>
       </div>
+      <button class="tool-btn" data-tool="select" title="Select (S)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L10,2L8.6,4.5L10,7L7.5,5.6M19.5,15.4L22,14L20.6,16.5L22,19L19.5,17.6L17,19L18.4,16.5L17,14L19.5,15.4M22,2L20.6,4.5L22,7L19.5,5.6L17,7L18.4,4.5L17,2L19.5,3.4L22,2M13.34,12.78L15.78,10.34L13.66,8.22L11.22,10.66L13.34,12.78M14.37,7.29L16.71,9.63C17.1,10 17.1,10.65 16.71,11.04L5.04,22.71C4.65,23.1 4,23.1 3.63,22.71L1.29,20.37C0.9,20 0.9,19.35 1.29,18.96L12.96,7.29C13.35,6.9 14,6.9 14.37,7.29Z"/>
+        </svg>
+      </button>
       <div class="toolbar-divider"></div>
       ${colorSwatches}
       <div class="toolbar-divider"></div>
@@ -650,6 +665,11 @@ class ScratchCanvas {
   setTool(tool) {
     this.currentTool = tool;
 
+    // Clear selection when switching tools
+    if (tool !== 'select' && this.selectedStrokes.size > 0) {
+      this.clearSelection();
+    }
+
     // Update active tool button
     this.toolbar.querySelectorAll('.tool-btn').forEach(btn => {
       btn.classList.remove('active');
@@ -689,6 +709,15 @@ class ScratchCanvas {
       // Show eraser mode pills
       if (eraserModePills) {
         eraserModePills.classList.add('visible');
+      }
+    } else if (tool === 'select') {
+      // Hide colors, palette button, and eraser mode pills for select tool
+      colorSwatches.forEach(swatch => swatch.style.display = 'none');
+      if (paletteBtn) paletteBtn.style.display = 'none';
+      if (dividers[0]) dividers[0].style.display = 'none';
+      if (dividers[1]) dividers[1].style.display = 'none';
+      if (eraserModePills) {
+        eraserModePills.classList.remove('visible');
       }
     } else {
       // Show colors and palette button, hide eraser mode pills
@@ -968,6 +997,13 @@ class ScratchCanvas {
         <circle cx="16" cy="16" r="1" fill="red"/>
         <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
+    } else if (this.currentTool === 'select') {
+      // Select/lasso cursor
+      cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="2" fill="#007AFF" stroke="white" stroke-width="1"/>
+        <circle cx="16" cy="16" r="8" fill="none" stroke="#007AFF" stroke-width="2" stroke-dasharray="2,2" opacity="0.5"/>
+        <text x="1" y="1" fill="transparent">${timestamp}</text>
+      </svg>`;
     }
 
     const encodedSvg = encodeURIComponent(cursorSvg);
@@ -1099,6 +1135,21 @@ class ScratchCanvas {
     // Only allow drawing with left mouse button (button 0)
     if (e.button !== 0) return;
 
+    if (this.currentTool === 'select') {
+      const x = e.pageX;
+      const y = e.pageY;
+
+      // Check if clicking on a selected stroke to start dragging
+      if (this.selectedStrokes.size > 0 && this.isPointInSelection(x, y)) {
+        this.startDraggingSelection(x, y);
+      } else {
+        // Start new lasso selection
+        this.clearSelection();
+        this.startSelection(x, y);
+      }
+      return;
+    }
+
     if (this.currentTool === 'eraser') {
       if (this.eraserMode === 'whole') {
         // Whole eraser: start delete preview mode (like quick delete but with left click)
@@ -1132,7 +1183,22 @@ class ScratchCanvas {
   }
 
   handleMouseMove(e) {
-    if (!this.isActive || !this.isDrawing) return;
+    if (!this.isActive) return;
+
+    const x = e.pageX;
+    const y = e.pageY;
+
+    // Handle selection tool
+    if (this.currentTool === 'select') {
+      if (this.isSelecting) {
+        this.updateSelection(x, y);
+      } else if (this.isDraggingSelection) {
+        this.dragSelection(x, y);
+      }
+      return;
+    }
+
+    if (!this.isDrawing) return;
 
     // Don't draw if in quick delete mode
     if (this.isQuickDeleteMode) return;
@@ -1188,6 +1254,16 @@ class ScratchCanvas {
   }
 
   handleMouseUp(e) {
+    // Handle selection tool
+    if (this.currentTool === 'select') {
+      if (this.isSelecting) {
+        this.completeSelection();
+      } else if (this.isDraggingSelection) {
+        this.stopDraggingSelection();
+      }
+      return;
+    }
+
     // Don't process if in quick delete mode (handled by quick delete listeners)
     if (this.isQuickDeleteMode) return;
 
@@ -1471,17 +1547,30 @@ class ScratchCanvas {
       return;
     }
 
-    // Handle 'D' key to toggle drawing mode
+    // Handle 'D' key
     if (e.key === 'd' || e.key === 'D') {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        this.toggleDrawingMode();
+        if (!this.isActive) {
+          // Open the extension if not active
+          this.toggleDrawingMode();
+        } else {
+          // Always switch to pen tool if extension is already open
+          this.setTool('pen');
+        }
         return;
       }
     }
 
-    // Handle Escape key to exit drawing mode
+    // Handle Escape key
     if (e.key === 'Escape' && this.isActive) {
+      // If there's a selection, clear it
+      if (this.selectedStrokes.size > 0 || this.isSelecting) {
+        e.preventDefault();
+        this.clearSelection();
+        return;
+      }
+      // Otherwise exit drawing mode
       e.preventDefault();
       this.toggleDrawingMode();
       return;
@@ -1495,6 +1584,12 @@ class ScratchCanvas {
     if (action) {
       e.preventDefault();
       this.executeAction(action);
+    }
+
+    // Handle 'S' key for select tool
+    if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey && this.isActive) {
+      e.preventDefault();
+      this.setTool('select');
     }
   }
 
@@ -1638,15 +1733,74 @@ class ScratchCanvas {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Redraw all remaining strokes
-    for (const stroke of this.strokes) {
-      this.drawStroke(stroke);
+    // Redraw all strokes
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      const isSelected = this.selectedStrokes.has(i);
+      this.drawStroke(stroke, isSelected);
+    }
+
+    // Draw selection box if there are selected strokes
+    if (this.selectedStrokes.size > 0 && this.selectionBounds) {
+      this.drawSelectionBox();
+    }
+
+    // Draw lasso if currently selecting
+    if (this.isSelecting && this.selectionPath.length > 1) {
+      this.drawLasso();
     }
   }
 
-  drawStroke(stroke) {
+  drawSelectionBox() {
+    if (!this.selectionBounds) return;
+
+    this.ctx.save();
+    this.ctx.strokeStyle = '#007AFF';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([5, 5]);
+
+    this.ctx.strokeRect(
+      this.selectionBounds.x,
+      this.selectionBounds.y,
+      this.selectionBounds.width,
+      this.selectionBounds.height
+    );
+
+    // Draw corner handles
+    this.ctx.fillStyle = '#007AFF';
+    const handleSize = 8;
+    const handles = [
+      {x: this.selectionBounds.x, y: this.selectionBounds.y}, // Top-left
+      {x: this.selectionBounds.x + this.selectionBounds.width, y: this.selectionBounds.y}, // Top-right
+      {x: this.selectionBounds.x, y: this.selectionBounds.y + this.selectionBounds.height}, // Bottom-left
+      {x: this.selectionBounds.x + this.selectionBounds.width, y: this.selectionBounds.y + this.selectionBounds.height} // Bottom-right
+    ];
+
+    for (const handle of handles) {
+      this.ctx.fillRect(
+        handle.x - handleSize / 2,
+        handle.y - handleSize / 2,
+        handleSize,
+        handleSize
+      );
+    }
+
+    this.ctx.restore();
+  }
+
+  drawStroke(stroke, isSelected = false) {
     // Validate stroke data
     if (!stroke || !stroke.points || stroke.points.length === 0) return;
+
+    this.ctx.save();
+
+    // Apply selection highlighting
+    if (isSelected) {
+      this.ctx.globalAlpha = 0.8;
+      // Add subtle glow effect for selected strokes
+      this.ctx.shadowColor = '#007AFF';
+      this.ctx.shadowBlur = 5;
+    }
 
     if (stroke.tool === 'highlighter') {
       this.ctx.globalCompositeOperation = 'multiply';
@@ -1675,6 +1829,8 @@ class ScratchCanvas {
       }
       this.ctx.stroke();
     }
+
+    this.ctx.restore();
   }
 
   clearCanvas() {
@@ -1968,6 +2124,224 @@ class ScratchCanvas {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  // Selection tool methods
+  startSelection(x, y) {
+    this.isSelecting = true;
+    this.selectionPath = [{x, y}];
+    this.selectedStrokes.clear();
+  }
+
+  updateSelection(x, y) {
+    if (!this.isSelecting) return;
+
+    // Add point to selection lasso path
+    this.selectionPath.push({x, y});
+
+    // Draw the lasso
+    this.redrawCanvas();
+    this.drawLasso();
+  }
+
+  completeSelection() {
+    if (!this.isSelecting) return;
+
+    this.isSelecting = false;
+
+    // Need at least 3 points to make a selection area
+    if (this.selectionPath.length < 3) {
+      this.selectionPath = [];
+      this.redrawCanvas();
+      return;
+    }
+
+    // Auto-close the lasso path by connecting last point to first
+    const closedPath = [...this.selectionPath];
+    if (this.selectionPath.length > 0) {
+      const firstPoint = this.selectionPath[0];
+      const lastPoint = this.selectionPath[this.selectionPath.length - 1];
+      // Only add closing point if last point isn't already close to first
+      const distance = Math.sqrt(
+        Math.pow(lastPoint.x - firstPoint.x, 2) +
+        Math.pow(lastPoint.y - firstPoint.y, 2)
+      );
+      if (distance > 10) {
+        // Auto-close the path
+        closedPath.push(firstPoint);
+      }
+    }
+
+    // Find strokes inside the lasso
+    this.selectedStrokes.clear();
+    for (let i = 0; i < this.strokes.length; i++) {
+      const stroke = this.strokes[i];
+      if (!stroke || !stroke.points) continue;
+
+      // Check if any point of the stroke is inside the lasso
+      // Use a sampling approach for long strokes
+      const checkPoints = [];
+      if (stroke.points.length <= 10) {
+        checkPoints.push(...stroke.points);
+      } else {
+        // Sample points along the stroke
+        const step = Math.max(1, Math.floor(stroke.points.length / 10));
+        for (let j = 0; j < stroke.points.length; j += step) {
+          checkPoints.push(stroke.points[j]);
+        }
+        // Always include last point
+        checkPoints.push(stroke.points[stroke.points.length - 1]);
+      }
+
+      for (const point of checkPoints) {
+        if (this.isPointInPolygon(point.x, point.y, closedPath)) {
+          this.selectedStrokes.add(i);
+          break;
+        }
+      }
+    }
+
+    // Calculate selection bounds
+    if (this.selectedStrokes.size > 0) {
+      this.calculateSelectionBounds();
+    }
+
+    // Clear lasso path and redraw with selection highlights
+    this.selectionPath = [];
+    this.redrawCanvas();
+  }
+
+  drawLasso() {
+    if (!this.isSelecting || this.selectionPath.length < 2) return;
+
+    this.ctx.save();
+    this.ctx.strokeStyle = '#007AFF';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([5, 5]);
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.selectionPath[0].x, this.selectionPath[0].y);
+
+    for (let i = 1; i < this.selectionPath.length; i++) {
+      this.ctx.lineTo(this.selectionPath[i].x, this.selectionPath[i].y);
+    }
+
+    // Don't close the path while drawing - let user draw freeform
+    this.ctx.stroke();
+    this.ctx.restore();
+  }
+
+  isPointInPolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+
+      const intersect = ((yi > y) !== (yj > y))
+          && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  calculateSelectionBounds() {
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    for (const strokeIndex of this.selectedStrokes) {
+      const stroke = this.strokes[strokeIndex];
+      if (!stroke || !stroke.bounds) continue;
+
+      minX = Math.min(minX, stroke.bounds.minX);
+      minY = Math.min(minY, stroke.bounds.minY);
+      maxX = Math.max(maxX, stroke.bounds.maxX);
+      maxY = Math.max(maxY, stroke.bounds.maxY);
+    }
+
+    this.selectionBounds = {
+      x: minX - 10,
+      y: minY - 10,
+      width: maxX - minX + 20,
+      height: maxY - minY + 20
+    };
+  }
+
+  isPointInSelection(x, y) {
+    if (!this.selectionBounds) return false;
+
+    return x >= this.selectionBounds.x &&
+           x <= this.selectionBounds.x + this.selectionBounds.width &&
+           y >= this.selectionBounds.y &&
+           y <= this.selectionBounds.y + this.selectionBounds.height;
+  }
+
+  startDraggingSelection(x, y) {
+    this.isDraggingSelection = true;
+    this.dragStartX = x;
+    this.dragStartY = y;
+
+    // Store original positions
+    this.originalStrokePositions.clear();
+    for (const strokeIndex of this.selectedStrokes) {
+      const stroke = this.strokes[strokeIndex];
+      if (!stroke || !stroke.points) continue;
+
+      this.originalStrokePositions.set(strokeIndex, {
+        points: stroke.points.map(p => ({x: p.x, y: p.y})),
+        bounds: {...stroke.bounds}
+      });
+    }
+  }
+
+  dragSelection(x, y) {
+    if (!this.isDraggingSelection) return;
+
+    const dx = x - this.dragStartX;
+    const dy = y - this.dragStartY;
+
+    // Update positions of selected strokes
+    for (const strokeIndex of this.selectedStrokes) {
+      const stroke = this.strokes[strokeIndex];
+      const original = this.originalStrokePositions.get(strokeIndex);
+      if (!stroke || !original) continue;
+
+      // Update points
+      stroke.points = original.points.map(p => ({
+        x: p.x + dx,
+        y: p.y + dy
+      }));
+
+      // Update bounds
+      stroke.bounds = {
+        minX: original.bounds.minX + dx,
+        maxX: original.bounds.maxX + dx,
+        minY: original.bounds.minY + dy,
+        maxY: original.bounds.maxY + dy
+      };
+    }
+
+    // Recalculate selection bounds based on moved strokes
+    this.calculateSelectionBounds();
+
+    this.redrawCanvas();
+  }
+
+  stopDraggingSelection() {
+    this.isDraggingSelection = false;
+    this.originalStrokePositions.clear();
+    this.calculateSelectionBounds();
+    this.redrawCanvas();
+  }
+
+  clearSelection() {
+    this.selectedStrokes.clear();
+    this.selectionBounds = null;
+    this.selectionPath = [];
+    this.isSelecting = false;
+    this.isDraggingSelection = false;
+    this.redrawCanvas();
   }
 
   loadSettings() {
