@@ -1180,6 +1180,11 @@ class ScratchCanvas {
         maxY: this.lastY
       }
     };
+
+    // Immediately draw a dot for quick taps
+    if (this.currentTool === 'pen' || this.currentTool === 'highlighter') {
+      this.drawDot(this.lastX, this.lastY, this.currentColor, this.toolSizes[this.currentTool], this.currentTool);
+    }
   }
 
   handleMouseMove(e) {
@@ -1274,9 +1279,14 @@ class ScratchCanvas {
       console.log('Ended partial erase mode');
     }
 
-    if (this.isDrawing && this.currentStroke) {
-      // Only save stroke if it has points
-      if (this.currentStroke.points.length > 0) {
+    if (this.isDrawing) {
+      // Always save the stroke if we were drawing, even for quick taps
+      if (this.currentStroke && this.currentStroke.points.length > 0) {
+        // Ensure stroke has valid properties
+        if (!this.currentStroke.tool) this.currentStroke.tool = this.currentTool;
+        if (!this.currentStroke.color) this.currentStroke.color = this.currentColor;
+        if (!this.currentStroke.size) this.currentStroke.size = this.toolSizes[this.currentTool];
+
         this.strokes.push(this.currentStroke);
 
         // Performance optimization: Enforce stroke limit
@@ -1287,8 +1297,8 @@ class ScratchCanvas {
         console.log(`Saved stroke with ${this.currentStroke.points.length} points`);
       }
       this.currentStroke = null;
+      this.isDrawing = false;
     }
-    this.isDrawing = false;
   }
 
   handleRightClick(e) {
@@ -1526,6 +1536,8 @@ class ScratchCanvas {
     // Redraw all strokes
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
+      if (!stroke || !stroke.points || stroke.points.length === 0) continue;
+
       const isHighlighted = this.quickDeleteStrokes.has(i);
 
       if (isHighlighted) {
@@ -1792,6 +1804,11 @@ class ScratchCanvas {
     // Validate stroke data
     if (!stroke || !stroke.points || stroke.points.length === 0) return;
 
+    // Ensure stroke has valid properties (fix for black dot bug)
+    const tool = stroke.tool || 'pen';
+    const color = stroke.color || this.currentColor || '#000000';
+    const size = stroke.size || this.toolSizes[tool] || 5;
+
     this.ctx.save();
 
     // Apply selection highlighting
@@ -1802,15 +1819,17 @@ class ScratchCanvas {
       this.ctx.shadowBlur = 5;
     }
 
-    if (stroke.tool === 'highlighter') {
-      this.ctx.globalCompositeOperation = 'multiply';
-      this.ctx.strokeStyle = this.hexToRgba(stroke.color, 0.4);
+    if (tool === 'highlighter') {
+      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
+      this.ctx.strokeStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
+      this.ctx.fillStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
     } else {
       this.ctx.globalCompositeOperation = 'source-over';
-      this.ctx.strokeStyle = stroke.color;
+      this.ctx.strokeStyle = color;
+      this.ctx.fillStyle = color;
     }
 
-    this.ctx.lineWidth = stroke.size || 2;
+    this.ctx.lineWidth = size;
     this.ctx.lineCap = 'round';
     this.ctx.lineJoin = 'round';
 
@@ -1819,7 +1838,7 @@ class ScratchCanvas {
     if (stroke.points.length === 1) {
       // Handle single point as a dot
       const point = stroke.points[0];
-      this.ctx.arc(point.x, point.y, (stroke.size || 2) / 2, 0, 2 * Math.PI);
+      this.ctx.arc(point.x, point.y, size / 2, 0, 2 * Math.PI);
       this.ctx.fill();
     } else {
       // Handle multiple points as a line
@@ -2124,6 +2143,24 @@ class ScratchCanvas {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  drawDot(x, y, color, size, tool) {
+    this.ctx.save();
+
+    if (tool === 'highlighter') {
+      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
+      this.ctx.fillStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
+    } else {
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.fillStyle = color;
+    }
+
+    this.ctx.beginPath();
+    this.ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
+    this.ctx.fill();
+
+    this.ctx.restore();
   }
 
   // Selection tool methods
