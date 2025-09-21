@@ -57,6 +57,10 @@ class ScratchCanvas {
     this.dragStartY = 0;
     this.originalStrokePositions = new Map();
 
+    // Undo/Redo functionality
+    this.undoHistory = [];
+    this.maxUndoHistory = 50; // Limit history to prevent memory issues
+
     // Performance optimizations
     this.performanceMode = false;
     this.maxStrokes = 500; // Limit stroke history
@@ -901,6 +905,14 @@ class ScratchCanvas {
   }
 
   splitStrokesAtPoints(strokesToModify) {
+    // Save original strokes for undo before modifying
+    if (strokesToModify.length > 0) {
+      this.saveToUndoHistory({
+        type: 'partialErase',
+        originalStrokes: [...this.strokes]
+      });
+    }
+
     // Process strokes in reverse order to maintain indices
     for (let i = strokesToModify.length - 1; i >= 0; i--) {
       const {strokeIndex, pointIndices} = strokesToModify[i];
@@ -1078,7 +1090,7 @@ class ScratchCanvas {
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
     document.addEventListener('contextmenu', (e) => this.handleRightClick(e));
-    document.addEventListener('keydown', (e) => this.handleKeyPress(e));
+    document.addEventListener('keydown', (e) => this.handleKeyPress(e), true); // Use capture phase
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'toggleDrawing') {
@@ -1289,6 +1301,11 @@ class ScratchCanvas {
 
         this.strokes.push(this.currentStroke);
 
+        // Save to undo history
+        this.saveToUndoHistory({
+          type: 'draw'
+        });
+
         // Performance optimization: Enforce stroke limit
         if (this.strokes.length > this.maxStrokes) {
           this.strokes.splice(0, this.strokes.length - this.maxStrokes);
@@ -1424,6 +1441,22 @@ class ScratchCanvas {
     const strokesToDelete = this.eraserDeleteStrokes.size;
     console.log(`Ending eraser delete mode, deleting ${strokesToDelete} strokes`);
 
+    // Save deleted strokes to undo history
+    if (strokesToDelete > 0) {
+      const deletedStrokes = [];
+      for (const index of this.eraserDeleteStrokes) {
+        deletedStrokes.push({
+          index: index,
+          stroke: this.strokes[index]
+        });
+      }
+
+      this.saveToUndoHistory({
+        type: 'delete',
+        deletedStrokes: deletedStrokes
+      });
+    }
+
     // Delete all highlighted strokes (in reverse order to maintain indices)
     if (strokesToDelete > 0) {
       const strokeIndices = Array.from(this.eraserDeleteStrokes).sort((a, b) => b - a);
@@ -1504,6 +1537,22 @@ class ScratchCanvas {
   endQuickDeleteMode() {
     console.log(`Ending quick delete mode, deleting ${this.quickDeleteStrokes.size} strokes`);
 
+    // Save deleted strokes to undo history
+    if (this.quickDeleteStrokes.size > 0) {
+      const deletedStrokes = [];
+      for (const index of this.quickDeleteStrokes) {
+        deletedStrokes.push({
+          index: index,
+          stroke: this.strokes[index]
+        });
+      }
+
+      this.saveToUndoHistory({
+        type: 'delete',
+        deletedStrokes: deletedStrokes
+      });
+    }
+
     // Delete all highlighted strokes (in reverse order to maintain indices)
     const strokeIndices = Array.from(this.quickDeleteStrokes).sort((a, b) => b - a);
     for (const index of strokeIndices) {
@@ -1559,6 +1608,14 @@ class ScratchCanvas {
       return;
     }
 
+    // Always handle Cmd+Z / Ctrl+Z when extension is active to prevent browser undo
+    if ((e.key === 'z' || e.key === 'Z') && (e.metaKey || e.ctrlKey) && this.isActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.undo();
+      return;
+    }
+
     // Handle 'D' key
     if (e.key === 'd' || e.key === 'D') {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1597,12 +1654,6 @@ class ScratchCanvas {
       e.preventDefault();
       this.executeAction(action);
     }
-
-    // Handle 'S' key for select tool
-    if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey && this.isActive) {
-      e.preventDefault();
-      this.setTool('select');
-    }
   }
 
   getKeyString(e) {
@@ -1623,14 +1674,20 @@ class ScratchCanvas {
       case 'clear':
         this.clearCanvas();
         break;
+      case 'undo':
+        this.undo();
+        break;
       case 'pen':
-        this.currentTool = 'pen';
+        this.setTool('pen');
         break;
       case 'highlighter':
-        this.currentTool = 'highlighter';
+        this.setTool('highlighter');
         break;
       case 'eraser':
-        this.currentTool = 'eraser';
+        this.setTool('eraser');
+        break;
+      case 'select':
+        this.setTool('select');
         break;
     }
   }
@@ -1853,8 +1910,72 @@ class ScratchCanvas {
   }
 
   clearCanvas() {
+    // Save current state before clearing
+    if (this.strokes.length > 0) {
+      this.saveToUndoHistory({
+        type: 'clear',
+        strokes: [...this.strokes]
+      });
+    }
+
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     this.strokes = []; // Clear stroke history
+  }
+
+  saveToUndoHistory(action) {
+    this.undoHistory.push(action);
+
+    // Limit history size
+    if (this.undoHistory.length > this.maxUndoHistory) {
+      this.undoHistory.shift();
+    }
+  }
+
+  undo() {
+    if (this.undoHistory.length === 0) return;
+
+    const lastAction = this.undoHistory.pop();
+
+    switch (lastAction.type) {
+      case 'clear':
+        // Restore all strokes that were cleared
+        this.strokes = lastAction.strokes;
+        break;
+
+      case 'draw':
+        // Remove the last drawn stroke
+        this.strokes.pop();
+        break;
+
+      case 'delete':
+        // Restore deleted strokes
+        for (const deletedStroke of lastAction.deletedStrokes) {
+          this.strokes.splice(deletedStroke.index, 0, deletedStroke.stroke);
+        }
+        break;
+
+      case 'move':
+        // Restore strokes to their original positions
+        for (const movedStroke of lastAction.movedStrokes) {
+          const stroke = this.strokes[movedStroke.index];
+          if (stroke) {
+            stroke.points = movedStroke.originalPoints;
+            stroke.bounds = movedStroke.originalBounds;
+          }
+        }
+        break;
+
+      case 'partialErase':
+        // Restore the original strokes before partial erasing
+        this.strokes = lastAction.originalStrokes;
+        break;
+    }
+
+    // Clear any selection after undo
+    this.clearSelection();
+
+    // Redraw canvas
+    this.redrawCanvas();
   }
 
   resizeCanvas() {
@@ -2003,9 +2124,12 @@ class ScratchCanvas {
     // Default shortcuts - will be overridden by stored shortcuts in loadSettings
     return {
       'Ctrl+Shift+C': 'clear',
+      'Ctrl+Z': 'undo',
+      'Meta+Z': 'undo',  // Cmd+Z on Mac
       'P': 'pen',
       'H': 'highlighter',
-      'E': 'eraser'
+      'E': 'eraser',
+      'S': 'select'
     };
   }
 
@@ -2366,6 +2490,23 @@ class ScratchCanvas {
   }
 
   stopDraggingSelection() {
+    // Save move action to undo history
+    if (this.originalStrokePositions.size > 0) {
+      const movedStrokes = [];
+      for (const [index, original] of this.originalStrokePositions) {
+        movedStrokes.push({
+          index: index,
+          originalPoints: original.points,
+          originalBounds: original.bounds
+        });
+      }
+
+      this.saveToUndoHistory({
+        type: 'move',
+        movedStrokes: movedStrokes
+      });
+    }
+
     this.isDraggingSelection = false;
     this.originalStrokePositions.clear();
     this.calculateSelectionBounds();

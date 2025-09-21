@@ -105,9 +105,12 @@ function displayShortcuts(shortcuts) {
   // Add default shortcuts if none exist
   const defaultShortcuts = shortcuts || {
     'Ctrl+Shift+C': 'clear',
+    'Ctrl+Z': 'undo',
+    'Meta+Z': 'undo',
     'P': 'pen',
     'H': 'highlighter',
-    'E': 'eraser'
+    'E': 'eraser',
+    'S': 'select'
   };
 
   Object.entries(defaultShortcuts).forEach(([key, action]) => {
@@ -129,9 +132,11 @@ function displayShortcuts(shortcuts) {
 function getActionDescription(action) {
   const descriptions = {
     'clear': 'Clear Canvas',
+    'undo': 'Undo Last Action',
     'pen': 'Select Pen Tool',
     'highlighter': 'Select Highlighter Tool',
     'eraser': 'Select Eraser Tool',
+    'select': 'Select/Lasso Tool',
     'toggle': 'Toggle Drawing Mode'
   };
   return descriptions[action] || action;
@@ -141,10 +146,10 @@ function addNewShortcut() {
   const key = prompt('Enter key combination (e.g., Ctrl+Shift+A, F1, etc.):');
   if (!key) return;
 
-  const action = prompt('Enter action (pen, highlighter, eraser, clear, toggle):');
+  const action = prompt('Enter action (pen, highlighter, eraser, select, clear, undo, toggle):');
   if (!action) return;
 
-  const validActions = ['pen', 'highlighter', 'eraser', 'clear', 'toggle'];
+  const validActions = ['pen', 'highlighter', 'eraser', 'select', 'clear', 'undo', 'toggle'];
   if (!validActions.includes(action)) {
     alert('Invalid action. Valid actions are: ' + validActions.join(', '));
     return;
@@ -154,9 +159,12 @@ function addNewShortcut() {
   chrome.storage.sync.get(['shortcuts'], (result) => {
     const shortcuts = result.shortcuts || {
       'Ctrl+Shift+C': 'clear',
+      'Ctrl+Z': 'undo',
+      'Meta+Z': 'undo',
       'P': 'pen',
       'H': 'highlighter',
-      'E': 'eraser'
+      'E': 'eraser',
+      'S': 'select'
     };
 
     shortcuts[key] = action;
