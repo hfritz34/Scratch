@@ -66,6 +66,9 @@ class ScratchCanvas {
     this.maxStrokes = 500; // Limit stroke history
     this.heavyDomains = ['youtube.com', 'instagram.com', 'facebook.com', 'twitter.com', 'x.com'];
 
+    // Drawing loop for smooth rendering
+    this.drawRequestId = null;
+
     // Viewport rendering properties
     this.viewportPadding = 500; // Extra padding around viewport for stroke rendering
     this.renderRequestId = null;
@@ -1193,10 +1196,8 @@ class ScratchCanvas {
       }
     };
 
-    // Immediately draw a dot for quick taps
-    if (this.currentTool === 'pen' || this.currentTool === 'highlighter') {
-      this.drawDot(this.lastX, this.lastY, this.currentColor, this.toolSizes[this.currentTool], this.currentTool);
-    }
+    // Start the drawing loop for smooth rendering
+    this.startDrawLoop();
   }
 
   handleMouseMove(e) {
@@ -1241,31 +1242,8 @@ class ScratchCanvas {
       this.currentStroke.bounds.maxY = Math.max(this.currentStroke.bounds.maxY, currentY);
     }
 
-    // Draw directly on canvas using document coordinates (no viewport offset needed)
-    if (this.currentTool === 'highlighter') {
-      // Use multiply blending for proper highlighter effect (unless in performance mode)
-      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
-      this.ctx.strokeStyle = this.hexToRgba(this.currentColor, this.performanceMode ? 0.2 : 0.4);
-      this.ctx.lineWidth = this.toolSizes.highlighter;
-      this.ctx.lineCap = 'round';
-      this.ctx.lineJoin = 'round';
-
-      this.ctx.beginPath();
-      this.ctx.moveTo(this.lastX, this.lastY);
-      this.ctx.lineTo(currentX, currentY);
-      this.ctx.stroke();
-    } else if (this.currentTool === 'pen') {
-      this.ctx.beginPath();
-      this.ctx.moveTo(this.lastX, this.lastY);
-      this.ctx.lineTo(currentX, currentY);
-
-      this.ctx.strokeStyle = this.currentColor;
-      this.ctx.lineWidth = this.toolSizes.pen;
-      this.ctx.globalCompositeOperation = 'source-over';
-      this.ctx.lineCap = 'round';
-      this.ctx.stroke();
-    }
-
+    // Don't draw directly here anymore - the drawing loop will handle it
+    // Just update the last position for tracking
     this.lastX = currentX;
     this.lastY = currentY;
   }
@@ -1292,6 +1270,9 @@ class ScratchCanvas {
     }
 
     if (this.isDrawing) {
+      // Stop the drawing loop
+      this.stopDrawLoop();
+
       // Always save the stroke if we were drawing, even for quick taps
       if (this.currentStroke && this.currentStroke.points.length > 0) {
         // Ensure stroke has valid properties
@@ -1809,6 +1790,11 @@ class ScratchCanvas {
       this.drawStroke(stroke, isSelected);
     }
 
+    // Draw the current stroke being drawn (if any)
+    if (this.isDrawing && this.currentStroke && this.currentStroke.points.length > 0) {
+      this.drawStroke(this.currentStroke, false);
+    }
+
     // Draw selection box if there are selected strokes
     if (this.selectedStrokes.size > 0 && this.selectionBounds) {
       this.drawSelectionBox();
@@ -1877,9 +1863,9 @@ class ScratchCanvas {
     }
 
     if (tool === 'highlighter') {
-      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
-      this.ctx.strokeStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
-      this.ctx.fillStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
+      // Use consistent rendering for highlighter
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.strokeStyle = this.hexToRgba(color, 0.3);
     } else {
       this.ctx.globalCompositeOperation = 'source-over';
       this.ctx.strokeStyle = color;
@@ -1893,10 +1879,18 @@ class ScratchCanvas {
     this.ctx.beginPath();
 
     if (stroke.points.length === 1) {
-      // Handle single point as a dot
+      // Handle single point consistently
       const point = stroke.points[0];
-      this.ctx.arc(point.x, point.y, size / 2, 0, 2 * Math.PI);
-      this.ctx.fill();
+      if (tool === 'highlighter') {
+        // Use stroke for highlighter dots
+        this.ctx.moveTo(point.x, point.y);
+        this.ctx.lineTo(point.x + 0.1, point.y + 0.1);
+        this.ctx.stroke();
+      } else {
+        // Use fill for pen dots
+        this.ctx.arc(point.x, point.y, size / 2, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
     } else {
       // Handle multiple points as a line
       this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
@@ -2034,11 +2028,13 @@ class ScratchCanvas {
     if (!stroke || !stroke.points || stroke.points.length === 0) return;
 
     if (stroke.tool === 'highlighter') {
-      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
-      this.ctx.strokeStyle = this.hexToRgba(stroke.color, this.performanceMode ? 0.2 : 0.4);
+      // Use consistent rendering for highlighter
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.strokeStyle = this.hexToRgba(stroke.color, 0.3);
     } else {
       this.ctx.globalCompositeOperation = 'source-over';
       this.ctx.strokeStyle = stroke.color;
+      this.ctx.fillStyle = stroke.color;
     }
 
     this.ctx.lineWidth = stroke.size || 2;
@@ -2048,12 +2044,20 @@ class ScratchCanvas {
     this.ctx.beginPath();
 
     if (stroke.points.length === 1) {
-      // Handle single point as a dot
+      // Handle single point consistently
       const point = stroke.points[0];
       const canvasX = point.x - scrollX;
       const canvasY = point.y - scrollY;
-      this.ctx.arc(canvasX, canvasY, (stroke.size || 2) / 2, 0, 2 * Math.PI);
-      this.ctx.fill();
+      if (stroke.tool === 'highlighter') {
+        // Use stroke for highlighter dots
+        this.ctx.moveTo(canvasX, canvasY);
+        this.ctx.lineTo(canvasX + 0.1, canvasY + 0.1);
+        this.ctx.stroke();
+      } else {
+        // Use fill for pen dots
+        this.ctx.arc(canvasX, canvasY, (stroke.size || 2) / 2, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
     } else {
       // Handle multiple points as a line
       const firstPoint = stroke.points[0];
@@ -2273,16 +2277,22 @@ class ScratchCanvas {
     this.ctx.save();
 
     if (tool === 'highlighter') {
-      this.ctx.globalCompositeOperation = this.performanceMode ? 'source-over' : 'multiply';
-      this.ctx.fillStyle = this.hexToRgba(color, this.performanceMode ? 0.2 : 0.4);
+      // Use consistent stroke rendering for highlighter
+      this.ctx.globalCompositeOperation = 'source-over';
+      this.ctx.strokeStyle = this.hexToRgba(color, 0.3);
+      this.ctx.lineWidth = size;
+      this.ctx.lineCap = 'round';
+      this.ctx.beginPath();
+      this.ctx.moveTo(x, y);
+      this.ctx.lineTo(x + 0.1, y + 0.1); // Tiny line to create a dot with round cap
+      this.ctx.stroke();
     } else {
       this.ctx.globalCompositeOperation = 'source-over';
       this.ctx.fillStyle = color;
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
+      this.ctx.fill();
     }
-
-    this.ctx.beginPath();
-    this.ctx.arc(x, y, size / 2, 0, 2 * Math.PI);
-    this.ctx.fill();
 
     this.ctx.restore();
   }
@@ -2392,6 +2402,26 @@ class ScratchCanvas {
     // Don't close the path while drawing - let user draw freeform
     this.ctx.stroke();
     this.ctx.restore();
+  }
+
+  // Drawing loop methods for smooth rendering
+  startDrawLoop() {
+    if (this.drawRequestId) return; // Already running
+
+    const loop = () => {
+      this.redrawCanvas(); // Redraw everything on each frame
+      this.drawRequestId = requestAnimationFrame(loop);
+    };
+    this.drawRequestId = requestAnimationFrame(loop);
+  }
+
+  stopDrawLoop() {
+    if (this.drawRequestId) {
+      cancelAnimationFrame(this.drawRequestId);
+      this.drawRequestId = null;
+      // Do one final redraw to ensure the last state is shown
+      this.redrawCanvas();
+    }
   }
 
   isPointInPolygon(x, y, polygon) {
