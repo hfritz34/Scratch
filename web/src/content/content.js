@@ -1122,6 +1122,13 @@ class ScratchCanvas {
       this.manuallyDisabled = false;
     }
 
+    // Safety check: ensure canvas and context exist
+    if (!this.canvas || !this.ctx) {
+      console.error('Canvas or context not initialized');
+      this.isActive = false;
+      return;
+    }
+
     this.canvas.style.display = this.isActive ? 'block' : 'none';
     this.canvas.style.pointerEvents = this.isActive ? 'auto' : 'none';
     this.toolbar.style.display = this.isActive ? 'flex' : 'none';
@@ -1780,6 +1787,18 @@ class ScratchCanvas {
   }
 
   redrawCanvas() {
+    // Safety check: ensure context exists
+    if (!this.ctx || !this.canvas) {
+      console.warn('Canvas or context not available, reinitializing...');
+      if (this.canvas) {
+        this.ctx = this.canvas.getContext('2d');
+      }
+      if (!this.ctx) {
+        console.error('Failed to get canvas context');
+        return;
+      }
+    }
+
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
