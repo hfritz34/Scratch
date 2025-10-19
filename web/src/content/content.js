@@ -107,6 +107,12 @@ class ScratchCanvas {
   }
 
   createCanvas() {
+    // Safety check: ensure document.body exists
+    if (!document.body) {
+      console.error('Scratch: document.body not available yet');
+      return;
+    }
+
     this.canvas = document.createElement('canvas');
     this.canvas.id = 'scratch-canvas';
     this.canvas.style.position = 'absolute';
@@ -125,6 +131,11 @@ class ScratchCanvas {
   }
 
   updateCanvasSize() {
+    // Safety check: ensure document body and canvas exist
+    if (!document.body || !this.canvas) {
+      return;
+    }
+
     const body = document.body;
     const html = document.documentElement;
 
@@ -163,6 +174,12 @@ class ScratchCanvas {
   }
 
   createToolbar() {
+    // Safety check: ensure document.body exists
+    if (!document.body) {
+      console.error('Scratch: document.body not available for toolbar');
+      return;
+    }
+
     console.log('Creating toolbar...');
     this.toolbar = document.createElement('div');
     this.toolbar.id = 'scratch-toolbar';
