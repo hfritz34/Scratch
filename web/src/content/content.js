@@ -75,6 +75,9 @@ class ScratchCanvas {
     this.lastScrollX = 0;
     this.lastScrollY = 0;
 
+    // Scroll distance limit for vector cleanup (5 viewport heights)
+    this.maxScrollDistance = window.innerHeight * 5;
+
     this.init();
   }
 
@@ -115,10 +118,11 @@ class ScratchCanvas {
 
     this.canvas = document.createElement('canvas');
     this.canvas.id = 'scratch-canvas';
-    this.canvas.style.position = 'absolute';
+    this.canvas.style.position = 'fixed'; // Changed to fixed to stay in viewport
     this.canvas.style.top = '0';
     this.canvas.style.left = '0';
-    this.canvas.style.width = '100%';
+    this.canvas.style.width = '100vw';
+    this.canvas.style.height = '100vh';
     this.canvas.style.pointerEvents = 'none';
     this.canvas.style.zIndex = '999998';
     this.canvas.style.display = 'none'; // Start hidden, show on hover
@@ -136,41 +140,20 @@ class ScratchCanvas {
       return;
     }
 
-    const body = document.body;
-    const html = document.documentElement;
-
-    // Get document dimensions but with performance limits
-    let height = Math.max(
-      body.scrollHeight, body.offsetHeight,
-      html.clientHeight, html.scrollHeight, html.offsetHeight,
-      window.innerHeight + window.pageYOffset
-    );
-    let width = Math.max(
-      body.scrollWidth, body.offsetWidth,
-      html.clientWidth, html.scrollWidth, html.offsetWidth,
-      window.innerWidth + window.pageXOffset
-    );
-
-    // Performance optimization: limit canvas size on heavy pages
-    if (this.performanceMode) {
-      const maxWidth = window.innerWidth * 3;
-      const maxHeight = window.innerHeight * 5;
-      width = Math.min(width, maxWidth);
-      height = Math.min(height, maxHeight);
-    }
+    // Canvas is now fixed to viewport, so use viewport dimensions
+    const width = window.innerWidth;
+    const height = window.innerHeight;
 
     // Avoid unnecessary resizes
     if (this.canvas.width === width && this.canvas.height === height) {
       return;
     }
 
-    // Set canvas size
+    // Set canvas size to viewport size
     this.canvas.width = width;
     this.canvas.height = height;
-    this.canvas.style.width = width + 'px';
-    this.canvas.style.height = height + 'px';
 
-    console.log('Canvas size updated:', width, 'x', height, this.performanceMode ? '(performance limited)' : '');
+    console.log('Canvas size updated:', width, 'x', height);
   }
 
   createToolbar() {
@@ -1093,17 +1076,18 @@ class ScratchCanvas {
       }, 100);
     });
 
-    // Listen for scroll events to update canvas size for long pages
+    // Listen for scroll events to redraw and cleanup strokes
     window.addEventListener('scroll', () => {
+      if (this.isActive) {
+        // Redraw immediately for smooth scrolling
+        this.redrawCanvas();
+      }
+
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
-        this.resizeCanvas(); // Use resizeCanvas which preserves strokes
-
-        // Cleanup distant strokes periodically when scrolling (performance mode only)
-        if (this.performanceMode) {
-          this.cleanupDistantStrokes();
-        }
-      }, 100);
+        // Cleanup distant strokes after scrolling stops
+        this.cleanupDistantStrokes();
+      }, 250);
     }, { passive: true });
 
     document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
@@ -1422,6 +1406,10 @@ class ScratchCanvas {
   redrawCanvasWithEraserHighlights() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // Get current scroll position
+    const scrollX = window.pageXOffset;
+    const scrollY = window.pageYOffset;
+
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
       if (!stroke || !stroke.points || stroke.points.length === 0) continue;
@@ -1434,7 +1422,7 @@ class ScratchCanvas {
         this.ctx.globalAlpha = 1.0;
       }
 
-      this.drawStroke(stroke);
+      this.drawStroke(stroke, false, scrollX, scrollY);
     }
 
     this.ctx.globalAlpha = 1.0;
@@ -1587,6 +1575,10 @@ class ScratchCanvas {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+    // Get current scroll position
+    const scrollX = window.pageXOffset;
+    const scrollY = window.pageYOffset;
+
     // Redraw all strokes
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
@@ -1598,11 +1590,11 @@ class ScratchCanvas {
         // Draw highlighted stroke with translucency
         this.ctx.save();
         this.ctx.globalAlpha = 0.3; // Make translucent
-        this.drawStroke(stroke);
+        this.drawStroke(stroke, false, scrollX, scrollY);
         this.ctx.restore();
       } else {
         // Draw normal stroke
-        this.drawStroke(stroke);
+        this.drawStroke(stroke, false, scrollX, scrollY);
       }
     }
   }
@@ -1819,30 +1811,34 @@ class ScratchCanvas {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Redraw all strokes
+    // Get current scroll position
+    const scrollX = window.pageXOffset;
+    const scrollY = window.pageYOffset;
+
+    // Redraw all strokes with scroll offset
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
       const isSelected = this.selectedStrokes.has(i);
-      this.drawStroke(stroke, isSelected);
+      this.drawStroke(stroke, isSelected, scrollX, scrollY);
     }
 
     // Draw the current stroke being drawn (if any)
     if (this.isDrawing && this.currentStroke && this.currentStroke.points.length > 0) {
-      this.drawStroke(this.currentStroke, false);
+      this.drawStroke(this.currentStroke, false, scrollX, scrollY);
     }
 
     // Draw selection box if there are selected strokes
     if (this.selectedStrokes.size > 0 && this.selectionBounds) {
-      this.drawSelectionBox();
+      this.drawSelectionBox(scrollX, scrollY);
     }
 
     // Draw lasso if currently selecting
     if (this.isSelecting && this.selectionPath.length > 1) {
-      this.drawLasso();
+      this.drawLasso(scrollX, scrollY);
     }
   }
 
-  drawSelectionBox() {
+  drawSelectionBox(scrollX = 0, scrollY = 0) {
     if (!this.selectionBounds) return;
 
     this.ctx.save();
@@ -1851,8 +1847,8 @@ class ScratchCanvas {
     this.ctx.setLineDash([5, 5]);
 
     this.ctx.strokeRect(
-      this.selectionBounds.x,
-      this.selectionBounds.y,
+      this.selectionBounds.x - scrollX,
+      this.selectionBounds.y - scrollY,
       this.selectionBounds.width,
       this.selectionBounds.height
     );
@@ -1879,7 +1875,7 @@ class ScratchCanvas {
     this.ctx.restore();
   }
 
-  drawStroke(stroke, isSelected = false) {
+  drawStroke(stroke, isSelected = false, scrollX = 0, scrollY = 0) {
     // Validate stroke data
     if (!stroke || !stroke.points || stroke.points.length === 0) return;
 
@@ -1917,21 +1913,26 @@ class ScratchCanvas {
     if (stroke.points.length === 1) {
       // Handle single point consistently
       const point = stroke.points[0];
+      const canvasX = point.x - scrollX;
+      const canvasY = point.y - scrollY;
+
       if (tool === 'highlighter') {
         // Use stroke for highlighter dots
-        this.ctx.moveTo(point.x, point.y);
-        this.ctx.lineTo(point.x + 0.1, point.y + 0.1);
+        this.ctx.moveTo(canvasX, canvasY);
+        this.ctx.lineTo(canvasX + 0.1, canvasY + 0.1);
         this.ctx.stroke();
       } else {
         // Use fill for pen dots
-        this.ctx.arc(point.x, point.y, size / 2, 0, 2 * Math.PI);
+        this.ctx.arc(canvasX, canvasY, size / 2, 0, 2 * Math.PI);
         this.ctx.fill();
       }
     } else {
       // Handle multiple points as a line
-      this.ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      const firstPoint = stroke.points[0];
+      this.ctx.moveTo(firstPoint.x - scrollX, firstPoint.y - scrollY);
       for (let i = 1; i < stroke.points.length; i++) {
-        this.ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+        const point = stroke.points[i];
+        this.ctx.lineTo(point.x - scrollX, point.y - scrollY);
       }
       this.ctx.stroke();
     }
@@ -2109,11 +2110,11 @@ class ScratchCanvas {
 
   // Clean up strokes that are very far from current viewport
   cleanupDistantStrokes() {
-    if (!this.performanceMode) return; // Only cleanup in performance mode
-
     const scrollX = window.pageXOffset;
     const scrollY = window.pageYOffset;
-    const cleanupDistance = this.viewportPadding * 4; // 4x viewport padding
+
+    // Use maxScrollDistance as cleanup boundary (5 viewport heights by default)
+    const cleanupDistance = this.maxScrollDistance;
 
     const viewportBounds = {
       left: scrollX - cleanupDistance,
@@ -2135,7 +2136,7 @@ class ScratchCanvas {
     });
 
     if (this.strokes.length < originalLength) {
-      console.log(`Cleaned up ${originalLength - this.strokes.length} distant strokes`);
+      console.log(`Cleaned up ${originalLength - this.strokes.length} distant strokes (beyond ${cleanupDistance}px)`);
     }
   }
 
@@ -2418,7 +2419,7 @@ class ScratchCanvas {
     this.redrawCanvas();
   }
 
-  drawLasso() {
+  drawLasso(scrollX = 0, scrollY = 0) {
     if (!this.isSelecting || this.selectionPath.length < 2) return;
 
     this.ctx.save();
@@ -2429,10 +2430,10 @@ class ScratchCanvas {
     this.ctx.lineJoin = 'round';
 
     this.ctx.beginPath();
-    this.ctx.moveTo(this.selectionPath[0].x, this.selectionPath[0].y);
+    this.ctx.moveTo(this.selectionPath[0].x - scrollX, this.selectionPath[0].y - scrollY);
 
     for (let i = 1; i < this.selectionPath.length; i++) {
-      this.ctx.lineTo(this.selectionPath[i].x, this.selectionPath[i].y);
+      this.ctx.lineTo(this.selectionPath[i].x - scrollX, this.selectionPath[i].y - scrollY);
     }
 
     // Don't close the path while drawing - let user draw freeform
