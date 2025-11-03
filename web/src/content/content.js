@@ -53,10 +53,15 @@ class ScratchCanvas {
     this.selectionPath = [];
     this.selectedStrokes = new Set();
     this.selectionBounds = null;
+    this.completedSelectionPath = null; // Store the completed lasso path for outline
+    this.originalSelectionPath = null; // Store original path when dragging
     this.isDraggingSelection = false;
     this.dragStartX = 0;
     this.dragStartY = 0;
     this.originalStrokePositions = new Map();
+
+    // Selection properties
+    this.lastSelectClick = null; // Track last click time for double-click detection
 
     // Undo/Redo functionality
     this.undoHistory = [];
@@ -1256,7 +1261,6 @@ class ScratchCanvas {
     const anchorElement = this.getElementUnderMouse(e);
 
     if (this.currentTool === 'select') {
-      // TODO: Update select tool to use viewport coordinates
       // Check if clicking on a selected stroke to start dragging
       if (this.selectedStrokes.size > 0 && this.isPointInSelection(pos.x, pos.y)) {
         this.startDraggingSelection(pos.x, pos.y);
@@ -1427,6 +1431,14 @@ class ScratchCanvas {
     }
 
     const now = Date.now();
+
+    // If in select mode with selected strokes, delete them on single right-click
+    // Check this BEFORE double-click to prevent accidental canvas clear
+    if (this.currentTool === 'select' && this.selectedStrokes.size > 0) {
+      this.deleteSelectedStrokes();
+      this.lastRightClick = null; // Reset to prevent double-click from clearing canvas
+      return;
+    }
 
     // Double right-click to clear canvas
     if (this.lastRightClick && now - this.lastRightClick < 300) {
@@ -1715,6 +1727,35 @@ class ScratchCanvas {
     }
 
     // Redraw canvas normally
+    this.redrawCanvas();
+  }
+
+  deleteSelectedStrokes() {
+    if (this.selectedStrokes.size === 0) return;
+
+    // Save deleted strokes to undo history
+    const deletedStrokes = [];
+    for (const index of this.selectedStrokes) {
+      deletedStrokes.push({
+        index: index,
+        stroke: this.strokes[index]
+      });
+    }
+    this.saveToUndoHistory({
+      type: 'delete',
+      strokes: deletedStrokes
+    });
+
+    // Delete all selected strokes (in reverse order to maintain indices)
+    const strokeIndices = Array.from(this.selectedStrokes).sort((a, b) => b - a);
+    for (const index of strokeIndices) {
+      this.strokes.splice(index, 1);
+    }
+
+    // Clear selection
+    this.clearSelection();
+
+    // Redraw canvas
     this.redrawCanvas();
   }
 
@@ -2023,9 +2064,9 @@ class ScratchCanvas {
       this.drawStroke(this.currentStroke, false, scrollDelta);
     }
 
-    // Draw selection box if there are selected strokes
-    if (this.selectedStrokes.size > 0 && this.selectionBounds) {
-      this.drawSelectionBox(currentWindowScroll.left, currentWindowScroll.top);
+    // Draw selection outline using the lasso shape
+    if (this.selectedStrokes.size > 0 && this.completedSelectionPath && this.completedSelectionPath.length > 0) {
+      this.drawSelectionOutline();
     }
 
     // Draw lasso if currently selecting
@@ -2165,6 +2206,36 @@ class ScratchCanvas {
       }
       this.ctx.stroke();
     }
+
+    this.ctx.restore();
+  }
+
+  drawSelectionOutline() {
+    // Draw the lasso selection shape as the outline
+    if (!this.completedSelectionPath || this.completedSelectionPath.length < 3) return;
+
+    this.ctx.save();
+    this.ctx.strokeStyle = '#007AFF'; // Blue color
+    this.ctx.lineWidth = 3; // Thick line
+    this.ctx.lineCap = 'round';
+    this.ctx.lineJoin = 'round';
+    this.ctx.setLineDash([8, 8]); // Dotted pattern with larger dashes for visibility
+    this.ctx.globalCompositeOperation = 'source-over';
+
+    this.ctx.beginPath();
+
+    // Draw the lasso path (already in viewport coordinates)
+    const firstPoint = this.completedSelectionPath[0];
+    this.ctx.moveTo(firstPoint.x, firstPoint.y);
+
+    for (let i = 1; i < this.completedSelectionPath.length; i++) {
+      const point = this.completedSelectionPath[i];
+      this.ctx.lineTo(point.x, point.y);
+    }
+
+    // Close the path
+    this.ctx.closePath();
+    this.ctx.stroke();
 
     this.ctx.restore();
   }
@@ -2587,6 +2658,7 @@ class ScratchCanvas {
     // Need at least 3 points to make a selection area
     if (this.selectionPath.length < 3) {
       this.selectionPath = [];
+      this.completedSelectionPath = null;
       this.redrawCanvas();
       return;
     }
@@ -2650,11 +2722,88 @@ class ScratchCanvas {
     // Calculate selection bounds
     if (this.selectedStrokes.size > 0) {
       this.calculateSelectionBounds();
+
+      // Expand the selection path to encompass all selected content
+      this.expandSelectionPath(closedPath, currentWindowScroll);
     }
 
     // Clear lasso path and redraw with selection highlights
     this.selectionPath = [];
     this.redrawCanvas();
+  }
+
+  expandSelectionPath(closedPath, currentWindowScroll) {
+    // Find the maximum stroke size for padding
+    let maxStrokeSize = 0;
+    const allStrokePoints = [];
+
+    for (const strokeIndex of this.selectedStrokes) {
+      const stroke = this.strokes[strokeIndex];
+      if (!stroke || !stroke.points) continue;
+
+      if (stroke.size) {
+        maxStrokeSize = Math.max(maxStrokeSize, stroke.size);
+      }
+
+      const scrollDelta = this.calculateScrollDelta(stroke, currentWindowScroll);
+
+      // Collect all stroke points for distance checking
+      for (const point of stroke.points) {
+        allStrokePoints.push({
+          x: point.x - scrollDelta.left,
+          y: point.y - scrollDelta.top
+        });
+      }
+    }
+
+    // Padding to account for stroke thickness (half the size on each side)
+    const strokePadding = Math.max(10, maxStrokeSize / 2 + 5);
+
+    // For each point on the lasso, check if any content is outside
+    // and expand only if needed
+    this.completedSelectionPath = closedPath.map(lassoPoint => {
+      // Find the closest stroke point to this lasso point
+      let minDistanceToStroke = Infinity;
+
+      for (const strokePoint of allStrokePoints) {
+        const distance = Math.sqrt(
+          Math.pow(strokePoint.x - lassoPoint.x, 2) +
+          Math.pow(strokePoint.y - lassoPoint.y, 2)
+        );
+        minDistanceToStroke = Math.min(minDistanceToStroke, distance);
+      }
+
+      // If any stroke is within the padding distance, expand this point
+      // Otherwise keep it at original position
+      if (minDistanceToStroke < strokePadding) {
+        // Calculate expansion needed (distance to reach beyond the stroke)
+        const expansionNeeded = strokePadding - minDistanceToStroke + 2;
+
+        // Find the direction to expand (away from centroid or based on nearby strokes)
+        // For simplicity, expand outward from the lasso centroid
+        let centerX = 0, centerY = 0;
+        for (const p of closedPath) {
+          centerX += p.x;
+          centerY += p.y;
+        }
+        centerX /= closedPath.length;
+        centerY /= closedPath.length;
+
+        const dx = lassoPoint.x - centerX;
+        const dy = lassoPoint.y - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 0) {
+          return {
+            x: lassoPoint.x + (dx / dist) * expansionNeeded,
+            y: lassoPoint.y + (dy / dist) * expansionNeeded
+          };
+        }
+      }
+
+      // No expansion needed, return original point
+      return { x: lassoPoint.x, y: lassoPoint.y };
+    });
   }
 
   drawLasso() {
@@ -2788,6 +2937,11 @@ class ScratchCanvas {
         bounds: {...stroke.bounds}
       });
     }
+
+    // Store original selection path
+    if (this.completedSelectionPath) {
+      this.originalSelectionPath = this.completedSelectionPath.map(p => ({x: p.x, y: p.y}));
+    }
   }
 
   dragSelection(x, y) {
@@ -2815,6 +2969,14 @@ class ScratchCanvas {
         minY: original.bounds.minY + dy,
         maxY: original.bounds.maxY + dy
       };
+    }
+
+    // Update selection outline path
+    if (this.originalSelectionPath) {
+      this.completedSelectionPath = this.originalSelectionPath.map(p => ({
+        x: p.x + dx,
+        y: p.y + dy
+      }));
     }
 
     // Recalculate selection bounds based on moved strokes
@@ -2851,6 +3013,7 @@ class ScratchCanvas {
     this.selectedStrokes.clear();
     this.selectionBounds = null;
     this.selectionPath = [];
+    this.completedSelectionPath = null;
     this.isSelecting = false;
     this.isDraggingSelection = false;
     this.redrawCanvas();

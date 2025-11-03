@@ -66,26 +66,28 @@ body {
 
 .quick-actions {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 14px;
   margin-bottom: 24px;
 }
 
 .action-btn {
-  flex: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 14px 18px;
+  gap: 10px;
+  padding: 18px 24px;
   border: none;
   border-radius: 12px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
   backdrop-filter: blur(15px);
   -webkit-backdrop-filter: blur(15px);
   border: 1px solid rgba(255, 255, 255, 0.3);
+  min-height: 54px;
 }
 
 .action-btn.primary {
