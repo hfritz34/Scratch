@@ -8,9 +8,28 @@ chrome.commands.onCommand.addListener((command) => {
     if (tabs[0]) {
       if (command === 'clear-canvas') {
         chrome.tabs.sendMessage(tabs[0].id, { action: 'clearCanvas' });
+      } else if (command === 'open-whiteboard') {
+        openWhiteboard();
       }
     }
   });
+});
+
+// Open whiteboard in new tab
+function openWhiteboard() {
+  chrome.tabs.create({
+    url: chrome.runtime.getURL('whiteboard.html'),
+    active: true
+  });
+}
+
+// Listen for messages from content scripts
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'openWhiteboard') {
+    openWhiteboard();
+    sendResponse({ success: true });
+    return true;
+  }
 });
 
 chrome.runtime.onInstalled.addListener(() => {

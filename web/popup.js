@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const toggleBtn = document.getElementById('toggle-drawing');
+  const whiteboardBtn = document.getElementById('new-whiteboard');
   const clearBtn = document.getElementById('clear-all');
   const customizeBtn = document.getElementById('customize-shortcuts');
   const optionsBtn = document.getElementById('open-options');
@@ -28,6 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+  });
+
+  // Open new whiteboard
+  whiteboardBtn.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'openWhiteboard' });
   });
 
   // Clear all drawings

@@ -126,20 +126,8 @@ class ScratchCanvas {
     let el = element;
 
     while (el && el !== document.body && el !== document.documentElement) {
-      // Check if element is scrollable by checking both:
-      // 1. Has scrollable content (scrollHeight/Width > clientHeight/Width)
-      // 2. Has overflow CSS that allows scrolling
-      const computedStyle = window.getComputedStyle(el);
-      const overflowX = computedStyle.overflowX;
-      const overflowY = computedStyle.overflowY;
-
-      const isScrollableX = (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
-      const isScrollableY = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
-
-      // Also check if element currently has scroll offset (might be scrollable even if not overflowing)
-      const hasScrollOffset = el.scrollTop > 0 || el.scrollLeft > 0;
-
-      if (isScrollableX || isScrollableY || hasScrollOffset) {
+      // Check if element is scrollable
+      if (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) {
         offsets.set(el, {
           top: el.scrollTop,
           left: el.scrollLeft
@@ -151,26 +139,16 @@ class ScratchCanvas {
   }
 
   initializeExtension() {
-    // Safety check: ensure document.body exists
-    if (!document.body) {
-      console.error('Scratch: document.body not available in initializeExtension, retrying...');
-      setTimeout(() => this.initializeExtension(), 100);
-      return;
-    }
-
-    console.log('Scratch: Initializing extension...');
     this.createCanvas();
     this.createToolbar();
     this.setupEventListeners();
     this.loadSettings();
-    console.log('Scratch: Initialization complete');
   }
 
   createCanvas() {
     // Safety check: ensure document.body exists
     if (!document.body) {
-      console.error('Scratch: document.body not available yet, retrying...');
-      setTimeout(() => this.createCanvas(), 100);
+      console.error('Scratch: document.body not available yet');
       return;
     }
 
@@ -217,8 +195,7 @@ class ScratchCanvas {
   createToolbar() {
     // Safety check: ensure document.body exists
     if (!document.body) {
-      console.error('Scratch: document.body not available for toolbar, retrying...');
-      setTimeout(() => this.createToolbar(), 100);
+      console.error('Scratch: document.body not available for toolbar');
       return;
     }
 
@@ -892,7 +869,7 @@ class ScratchCanvas {
       this.isActive = true;
       console.log('Hover-activated drawing mode');
       this.canvas.style.display = 'block';
-      // Keep pointer-events as 'none' to allow scrolling underneath
+      this.canvas.style.pointerEvents = 'auto';
       this.toolbar.style.display = 'flex';
       this.setTool('pen');
       this.updateCursor();
@@ -907,15 +884,9 @@ class ScratchCanvas {
       this.isActive = false;
       console.log('Hover-deactivated drawing mode');
       this.canvas.style.display = 'none';
-      // Canvas already has pointer-events: none
+      this.canvas.style.pointerEvents = 'none';
       this.toolbar.style.display = 'none';
-      document.body.style.removeProperty('cursor');
-
-      // Remove cursor override style
-      const styleElement = document.getElementById('scratch-cursor-override');
-      if (styleElement) {
-        styleElement.remove();
-      }
+      this.canvas.style.cursor = 'default';
     }
   }
 
@@ -1100,32 +1071,15 @@ class ScratchCanvas {
     const encodedSvg = encodeURIComponent(cursorSvg);
     const cursorUrl = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, crosshair`;
 
-    // Set cursor on document.body and all elements since canvas has pointer-events: none
-    // Use !important to override Monaco editor and other custom cursors
-    document.body.style.setProperty('cursor', cursorUrl, 'important');
 
-    // Also set on all elements to override editor cursors with a global style
-    // AND disable text selection and pointer events on all content
-    const styleId = 'scratch-cursor-override';
-    let styleElement = document.getElementById(styleId);
-    if (!styleElement) {
-      styleElement = document.createElement('style');
-      styleElement.id = styleId;
-      document.head.appendChild(styleElement);
-    }
-    styleElement.textContent = `
-      * {
-        cursor: ${cursorUrl} !important;
-        user-select: none !important;
-        -webkit-user-select: none !important;
-        -moz-user-select: none !important;
-        -ms-user-select: none !important;
-      }
-      #scratch-toolbar {
-        user-select: auto !important;
-        -webkit-user-select: auto !important;
-      }
-    `;
+    // Force cursor update by temporarily setting to different values
+    this.canvas.style.cursor = 'auto';
+    setTimeout(() => {
+      this.canvas.style.cursor = 'crosshair';
+      setTimeout(() => {
+        this.canvas.style.cursor = cursorUrl;
+      }, 10);
+    }, 10);
   }
 
   setColor(color) {
@@ -1172,12 +1126,11 @@ class ScratchCanvas {
     // Continuous rendering loop to handle scroll changes smoothly
     this.startContinuousRendering();
 
-    // Use capture phase to intercept events BEFORE Monaco editor and other elements
-    document.addEventListener('mousedown', (e) => this.handleMouseDown(e), true);
-    document.addEventListener('mousemove', (e) => this.handleMouseMove(e), true);
-    document.addEventListener('mouseup', (e) => this.handleMouseUp(e), true);
-    document.addEventListener('contextmenu', (e) => this.handleRightClick(e), true);
-    document.addEventListener('keydown', (e) => this.handleKeyPress(e), true);
+    document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+    document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+    document.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+    document.addEventListener('contextmenu', (e) => this.handleRightClick(e));
+    document.addEventListener('keydown', (e) => this.handleKeyPress(e), true); // Use capture phase
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === 'toggleDrawing') {
@@ -1214,7 +1167,7 @@ class ScratchCanvas {
     }
 
     this.canvas.style.display = this.isActive ? 'block' : 'none';
-    // Keep pointer-events as 'none' to allow scrolling underneath
+    this.canvas.style.pointerEvents = this.isActive ? 'auto' : 'none';
     this.toolbar.style.display = this.isActive ? 'flex' : 'none';
 
     if (this.isActive) {
@@ -1225,13 +1178,7 @@ class ScratchCanvas {
       // Redraw any existing strokes
       this.redrawCanvas();
     } else {
-      document.body.style.removeProperty('cursor');
-
-      // Remove cursor override style
-      const styleElement = document.getElementById('scratch-cursor-override');
-      if (styleElement) {
-        styleElement.remove();
-      }
+      this.canvas.style.cursor = 'default';
     }
   }
 
@@ -1240,10 +1187,6 @@ class ScratchCanvas {
 
     // Prevent drawing if clicking on toolbar or dragging it
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
-
-    // Prevent default to stop text selection and clicking on links/elements
-    e.preventDefault();
-    e.stopPropagation(); // Stop event from reaching Monaco editor and other elements
 
     // Prevent ALL drawing-related actions if in quick delete mode or eraser delete mode
     if (this.isQuickDeleteMode || this.isEraserDeleteMode) return;
@@ -1322,22 +1265,14 @@ class ScratchCanvas {
     // Handle selection tool
     if (this.currentTool === 'select') {
       if (this.isSelecting) {
-        e.preventDefault(); // Prevent text selection while drawing lasso
-        e.stopPropagation(); // Stop event propagation
         this.updateSelection(x, y);
       } else if (this.isDraggingSelection) {
-        e.preventDefault(); // Prevent text selection while dragging
-        e.stopPropagation(); // Stop event propagation
         this.dragSelection(x, y);
       }
       return;
     }
 
     if (!this.isDrawing) return;
-
-    // Prevent text selection while drawing
-    e.preventDefault();
-    e.stopPropagation(); // Stop event propagation to editor
 
     // Don't draw if in quick delete mode
     if (this.isQuickDeleteMode) return;
@@ -1545,14 +1480,13 @@ class ScratchCanvas {
 
       // Check if this stroke is marked for deletion
       if (this.eraserDeleteStrokes.has(i)) {
-        // Draw with more transparency for strokes to be deleted
-        this.ctx.save();
+        // Draw with translucent effect for strokes to be deleted
         this.ctx.globalAlpha = 0.3;
-        this.drawStroke(stroke, false, scrollDelta);
-        this.ctx.restore();
       } else {
-        this.drawStroke(stroke, false, scrollDelta);
+        this.ctx.globalAlpha = 1.0;
       }
+
+      this.drawStroke(stroke, false, scrollDelta);
     }
 
     this.ctx.globalAlpha = 1.0;
@@ -1736,9 +1670,9 @@ class ScratchCanvas {
       const scrollDelta = this.calculateScrollDelta(stroke, currentWindowScroll);
 
       if (isHighlighted) {
-        // Draw highlighted stroke with more transparency
+        // Draw highlighted stroke with translucency
         this.ctx.save();
-        this.ctx.globalAlpha = 0.3;
+        this.ctx.globalAlpha = 0.3; // Make translucent
         this.drawStroke(stroke, false, scrollDelta);
         this.ctx.restore();
       } else {
@@ -1762,15 +1696,6 @@ class ScratchCanvas {
       return;
     }
 
-    // Handle 'W' key for whiteboard (only when extension is active)
-    if ((e.key === 'w' || e.key === 'W') && this.isActive) {
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-        e.preventDefault();
-        chrome.runtime.sendMessage({ action: 'openWhiteboard' });
-        return;
-      }
-    }
-
     // Handle 'D' key
     if (e.key === 'd' || e.key === 'D') {
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -1788,13 +1713,6 @@ class ScratchCanvas {
 
     // Handle Escape key
     if (e.key === 'Escape' && this.isActive) {
-      // Check if we're on the whiteboard page
-      if (window.isWhiteboardPage) {
-        e.preventDefault();
-        window.close(); // Close whiteboard tab and return to previous tab
-        return;
-      }
-
       // If there's a selection, clear it
       if (this.selectedStrokes.size > 0 || this.isSelecting) {
         e.preventDefault();
@@ -2706,14 +2624,7 @@ class ScratchCanvas {
 
     const render = () => {
       if (this.isActive && this.strokes.length > 0) {
-        // Check if we're in delete preview mode
-        if (this.isQuickDeleteMode && this.isQuickDeleting) {
-          this.redrawCanvasWithHighlights();
-        } else if (this.isEraserDeleteMode && this.isEraserDeleting) {
-          this.redrawCanvasWithEraserHighlights();
-        } else {
-          this.redrawCanvas();
-        }
+        this.redrawCanvas();
       }
       this.continuousRenderingId = requestAnimationFrame(render);
     };
@@ -2905,8 +2816,3 @@ class ScratchCanvas {
 }
 
 const scratch = new ScratchCanvas();
-
-// Expose scratch instance globally for whiteboard page to access
-if (window.isWhiteboardPage) {
-  window.scratch = scratch;
-}
