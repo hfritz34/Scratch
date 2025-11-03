@@ -6,6 +6,7 @@ class ScratchCanvas {
     this.currentTool = 'pen';
     this.currentColor = '#000000';
     this.eraserMode = 'whole'; // 'whole' or 'partial'
+    this.isScrollMode = false; // Scroll mode flag
     this.toolSizes = {
       pen: 5,
       highlighter: 15,
@@ -68,6 +69,7 @@ class ScratchCanvas {
 
     // Drawing loop for smooth rendering
     this.drawRequestId = null;
+    this.continuousRenderingId = null;
 
     // Viewport rendering properties
     this.viewportPadding = 500; // Extra padding around viewport for stroke rendering
@@ -100,6 +102,14 @@ class ScratchCanvas {
     } else {
       this.initializeExtension();
     }
+  }
+
+  // Simple page position - drawings always stick to content
+  getPagePosition(e) {
+    return {
+      x: Math.round(e.pageX),
+      y: Math.round(e.pageY)
+    };
   }
 
   initializeExtension() {
@@ -212,9 +222,14 @@ class ScratchCanvas {
         <button class="mode-pill active" data-mode="whole" title="Whole eraser - removes entire strokes">Whole</button>
         <button class="mode-pill" data-mode="partial" title="Partial eraser - removes parts of strokes">Partial</button>
       </div>
-      <button class="tool-btn" data-tool="select" title="Select (S)">
+      <button class="tool-btn" data-tool="select" title="Select (V)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
           <path d="M7.5,5.6L5,7L6.4,4.5L5,2L7.5,3.4L10,2L8.6,4.5L10,7L7.5,5.6M19.5,15.4L22,14L20.6,16.5L22,19L19.5,17.6L17,19L18.4,16.5L17,14L19.5,15.4M22,2L20.6,4.5L22,7L19.5,5.6L17,7L18.4,4.5L17,2L19.5,3.4L22,2M13.34,12.78L15.78,10.34L13.66,8.22L11.22,10.66L13.34,12.78M14.37,7.29L16.71,9.63C17.1,10 17.1,10.65 16.71,11.04L5.04,22.71C4.65,23.1 4,23.1 3.63,22.71L1.29,20.37C0.9,20 0.9,19.35 1.29,18.96L12.96,7.29C13.35,6.9 14,6.9 14.37,7.29Z"/>
+        </svg>
+      </button>
+      <button class="tool-btn" data-tool="scroll" title="Scroll (S)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13,6V11H18V7.75L22.25,12L18,16.25V13H13V18H16.25L12,22.25L7.75,18H11V13H6V16.25L1.75,12L6,7.75V11H11V6H7.75L12,1.75L16.25,6H13Z"/>
         </svg>
       </button>
       <div class="toolbar-divider"></div>
@@ -717,8 +732,8 @@ class ScratchCanvas {
       if (eraserModePills) {
         eraserModePills.classList.add('visible');
       }
-    } else if (tool === 'select') {
-      // Hide colors, palette button, and eraser mode pills for select tool
+    } else if (tool === 'select' || tool === 'scroll') {
+      // Hide colors, palette button, and eraser mode pills for select/scroll tool
       colorSwatches.forEach(swatch => swatch.style.display = 'none');
       if (paletteBtn) paletteBtn.style.display = 'none';
       if (dividers[0]) dividers[0].style.display = 'none';
@@ -1019,10 +1034,17 @@ class ScratchCanvas {
         <circle cx="16" cy="16" r="8" fill="none" stroke="#007AFF" stroke-width="2" stroke-dasharray="2,2" opacity="0.5"/>
         <text x="1" y="1" fill="transparent">${timestamp}</text>
       </svg>`;
+    } else if (this.currentTool === 'scroll') {
+      // Scroll/move cursor - hand icon
+      cursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+        <path d="M16 8 L20 12 L18 12 L18 20 L20 20 L16 24 L12 20 L14 20 L14 12 L12 12 Z" fill="#555" stroke="white" stroke-width="1.5"/>
+        <path d="M8 16 L12 12 L12 14 L20 14 L20 12 L24 16 L20 20 L20 18 L12 18 L12 20 Z" fill="#555" stroke="white" stroke-width="1.5"/>
+        <text x="1" y="1" fill="transparent">${timestamp}</text>
+      </svg>`;
     }
 
     const encodedSvg = encodeURIComponent(cursorSvg);
-    const cursorUrl = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, crosshair`;
+    const cursorUrl = `url('data:image/svg+xml;utf8,${encodedSvg}') 16 16, move`;
 
 
     // Force cursor update by temporarily setting to different values
@@ -1076,19 +1098,8 @@ class ScratchCanvas {
       }, 100);
     });
 
-    // Listen for scroll events to redraw and cleanup strokes
-    window.addEventListener('scroll', () => {
-      if (this.isActive) {
-        // Redraw immediately for smooth scrolling
-        this.redrawCanvas();
-      }
-
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        // Cleanup distant strokes after scrolling stops
-        this.cleanupDistantStrokes();
-      }, 250);
-    }, { passive: true });
+    // Continuous rendering loop to handle scroll changes smoothly
+    this.startContinuousRendering();
 
     document.addEventListener('mousedown', (e) => this.handleMouseDown(e));
     document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
@@ -1149,6 +1160,11 @@ class ScratchCanvas {
   handleMouseDown(e) {
     if (!this.isActive) return;
 
+    // In scroll mode, allow all default behavior - act like normal browsing
+    if (this.currentTool === 'scroll') {
+      return;
+    }
+
     // Prevent drawing if clicking on toolbar or dragging it
     if (e.target.closest('#scratch-toolbar') || this.isDraggingToolbar) return;
 
@@ -1159,16 +1175,15 @@ class ScratchCanvas {
     if (e.button !== 0) return;
 
     if (this.currentTool === 'select') {
-      const x = e.pageX;
-      const y = e.pageY;
+      const pos = this.getPagePosition(e);
 
       // Check if clicking on a selected stroke to start dragging
-      if (this.selectedStrokes.size > 0 && this.isPointInSelection(x, y)) {
-        this.startDraggingSelection(x, y);
+      if (this.selectedStrokes.size > 0 && this.isPointInSelection(pos.x, pos.y)) {
+        this.startDraggingSelection(pos.x, pos.y);
       } else {
         // Start new lasso selection
         this.clearSelection();
-        this.startSelection(x, y);
+        this.startSelection(pos.x, pos.y);
       }
       return;
     }
@@ -1180,15 +1195,17 @@ class ScratchCanvas {
         return;
       } else {
         // Partial eraser: start erasing mode
-        this.startPartialErase(e.pageX, e.pageY);
+        const pos = this.getPagePosition(e);
+        this.startPartialErase(pos.x, pos.y);
         // Don't return, let it continue to drawing logic for continuous erasing
       }
     }
 
     this.isDrawing = true;
-    // Ensure precise positioning at cursor center
-    this.lastX = Math.round(e.pageX);
-    this.lastY = Math.round(e.pageY);
+    // Get position with container info
+    const pos = this.getPagePosition(e);
+    this.lastX = pos.x;
+    this.lastY = pos.y;
 
     // Start new stroke tracking with precise coordinates
     this.currentStroke = {
@@ -1211,8 +1228,15 @@ class ScratchCanvas {
   handleMouseMove(e) {
     if (!this.isActive) return;
 
-    const x = e.pageX;
-    const y = e.pageY;
+    // In scroll mode, do nothing - allow default scrolling behavior
+    if (this.currentTool === 'scroll') {
+      return;
+    }
+
+    // Get viewport-relative position
+    const pos = this.getPagePosition(e);
+    const x = pos.x;
+    const y = pos.y;
 
     // Handle selection tool
     if (this.currentTool === 'select') {
@@ -1231,13 +1255,13 @@ class ScratchCanvas {
 
     // Handle partial erasing
     if (this.currentTool === 'eraser' && this.eraserMode === 'partial' && this.isErasing) {
-      this.partialErase(e.pageX, e.pageY);
+      this.partialErase(x, y);
       return;
     }
 
-    // Use precise rounded coordinates for consistent positioning
-    const currentX = Math.round(e.pageX);
-    const currentY = Math.round(e.pageY);
+    // Use precise coordinates for consistent positioning
+    const currentX = x;
+    const currentY = y;
 
     // Add point to current stroke
     if (this.currentStroke) {
@@ -1257,6 +1281,11 @@ class ScratchCanvas {
   }
 
   handleMouseUp(e) {
+    // In scroll mode, allow all default behavior - act like normal browsing
+    if (this.currentTool === 'scroll') {
+      return;
+    }
+
     // Handle selection tool
     if (this.currentTool === 'select') {
       if (this.isSelecting) {
@@ -1309,6 +1338,12 @@ class ScratchCanvas {
 
   handleRightClick(e) {
     if (!this.isActive) return;
+
+    // In scroll mode, allow all default behavior - act like normal browsing
+    if (this.currentTool === 'scroll') {
+      return;
+    }
+
     e.preventDefault();
 
     // If eraser tool is selected, right-click toggles between whole/partial modes
@@ -1361,7 +1396,8 @@ class ScratchCanvas {
     // Set up event listeners for eraser delete mode
     const handleMouseMove = (moveEvent) => {
       if (this.isEraserDeleteMode && this.isEraserDeleting) {
-        this.highlightStrokesForEraserDeletion(moveEvent.pageX, moveEvent.pageY);
+        const pos = this.getPagePosition(moveEvent);
+        this.highlightStrokesForEraserDeletion(pos.x, pos.y);
       }
     };
 
@@ -1377,7 +1413,8 @@ class ScratchCanvas {
     document.addEventListener('mouseup', handleMouseUp);
 
     // Initial highlight at click position
-    this.highlightStrokesForEraserDeletion(e.pageX, e.pageY);
+    const pos = this.getPagePosition(e);
+    this.highlightStrokesForEraserDeletion(pos.x, pos.y);
   }
 
   highlightStrokesForEraserDeletion(x, y) {
@@ -1406,7 +1443,6 @@ class ScratchCanvas {
   redrawCanvasWithEraserHighlights() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Get current scroll position
     const scrollX = window.pageXOffset;
     const scrollY = window.pageYOffset;
 
@@ -1479,7 +1515,8 @@ class ScratchCanvas {
     // Set up event listeners for quick delete
     const handleMouseMove = (moveEvent) => {
       if (this.isQuickDeleteMode && this.isQuickDeleting) {
-        this.highlightStrokesForDeletion(moveEvent.pageX, moveEvent.pageY);
+        const pos = this.getPagePosition(moveEvent);
+        this.highlightStrokesForDeletion(pos.x, pos.y);
       }
     };
 
@@ -1501,7 +1538,8 @@ class ScratchCanvas {
     document.addEventListener('contextmenu', preventContext);
 
     // Initial erase at click position
-    this.highlightStrokesForDeletion(e.pageX, e.pageY);
+    const pos = this.getPagePosition(e);
+    this.highlightStrokesForDeletion(pos.x, pos.y);
   }
 
   highlightStrokesForDeletion(x, y) {
@@ -1575,7 +1613,6 @@ class ScratchCanvas {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Get current scroll position
     const scrollX = window.pageXOffset;
     const scrollY = window.pageYOffset;
 
@@ -1685,6 +1722,9 @@ class ScratchCanvas {
         break;
       case 'select':
         this.setTool('select');
+        break;
+      case 'scroll':
+        this.setTool('scroll');
         break;
     }
   }
@@ -1811,11 +1851,11 @@ class ScratchCanvas {
     // Clear canvas
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Get current scroll position
+    // Get scroll offset
     const scrollX = window.pageXOffset;
     const scrollY = window.pageYOffset;
 
-    // Redraw all strokes with scroll offset
+    // Redraw all strokes
     for (let i = 0; i < this.strokes.length; i++) {
       const stroke = this.strokes[i];
       const isSelected = this.selectedStrokes.has(i);
@@ -1875,7 +1915,7 @@ class ScratchCanvas {
     this.ctx.restore();
   }
 
-  drawStroke(stroke, isSelected = false, scrollX = 0, scrollY = 0) {
+  drawStroke(stroke, isSelected = false, scrollX = window.pageXOffset, scrollY = window.pageYOffset) {
     // Validate stroke data
     if (!stroke || !stroke.points || stroke.points.length === 0) return;
 
@@ -2108,12 +2148,10 @@ class ScratchCanvas {
     }
   }
 
-  // Clean up strokes that are very far from current viewport
+  // Clean up strokes that are far from current scroll position
   cleanupDistantStrokes() {
     const scrollX = window.pageXOffset;
     const scrollY = window.pageYOffset;
-
-    // Use maxScrollDistance as cleanup boundary (5 viewport heights by default)
     const cleanupDistance = this.maxScrollDistance;
 
     const viewportBounds = {
@@ -2136,7 +2174,7 @@ class ScratchCanvas {
     });
 
     if (this.strokes.length < originalLength) {
-      console.log(`Cleaned up ${originalLength - this.strokes.length} distant strokes (beyond ${cleanupDistance}px)`);
+      console.log(`Cleaned up ${originalLength - this.strokes.length} distant strokes`);
     }
   }
 
@@ -2170,7 +2208,8 @@ class ScratchCanvas {
       'P': 'pen',
       'H': 'highlighter',
       'E': 'eraser',
-      'S': 'select'
+      'V': 'select',
+      'S': 'scroll'
     };
   }
 
@@ -2461,6 +2500,27 @@ class ScratchCanvas {
     }
   }
 
+  // Continuous rendering loop to handle scroll changes
+  startContinuousRendering() {
+    if (this.continuousRenderingId) return; // Already running
+
+    const render = () => {
+      if (this.isActive && this.strokes.length > 0) {
+        this.redrawCanvas();
+      }
+      this.continuousRenderingId = requestAnimationFrame(render);
+    };
+
+    this.continuousRenderingId = requestAnimationFrame(render);
+  }
+
+  stopContinuousRendering() {
+    if (this.continuousRenderingId) {
+      cancelAnimationFrame(this.continuousRenderingId);
+      this.continuousRenderingId = null;
+    }
+  }
+
   isPointInPolygon(x, y, polygon) {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -2592,7 +2652,28 @@ class ScratchCanvas {
   loadSettings() {
     chrome.storage.sync.get(['shortcuts', 'selectedPalette'], (result) => {
       if (result.shortcuts) {
-        this.shortcuts = result.shortcuts;
+        // Start with stored shortcuts
+        const mergedShortcuts = { ...result.shortcuts };
+
+        // Update old 'S': 'select' to 'V': 'select' and add 'S': 'scroll'
+        if (mergedShortcuts['S'] === 'select') {
+          delete mergedShortcuts['S'];
+          mergedShortcuts['V'] = 'select';
+          mergedShortcuts['S'] = 'scroll';
+        }
+
+        // Ensure new shortcuts exist (in case they weren't in storage)
+        if (!mergedShortcuts['S']) {
+          mergedShortcuts['S'] = 'scroll';
+        }
+        if (!mergedShortcuts['V'] && !mergedShortcuts['S']) {
+          mergedShortcuts['V'] = 'select';
+        }
+
+        this.shortcuts = mergedShortcuts;
+
+        // Save updated shortcuts back to storage
+        chrome.storage.sync.set({ shortcuts: mergedShortcuts });
       }
       if (result.selectedPalette) {
         this.currentPalette = result.selectedPalette;
