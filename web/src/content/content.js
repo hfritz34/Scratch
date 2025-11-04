@@ -62,6 +62,8 @@ class ScratchCanvas {
 
     // Selection properties
     this.lastSelectClick = null; // Track last click time for double-click detection
+    this.lastLeftClick = null; // Track last left-click time for double-click toggle
+    this.previousToolBeforeSelect = null; // Store tool before switching to select
 
     // Undo/Redo functionality
     this.undoHistory = [];
@@ -807,6 +809,19 @@ class ScratchCanvas {
     this.updateCursor();
   }
 
+  toggleSelectTool() {
+    if (this.currentTool === 'select') {
+      // If currently on select, return to previous tool (or default to pen)
+      const previousTool = this.previousToolBeforeSelect || 'pen';
+      this.setTool(previousTool);
+      this.previousToolBeforeSelect = null;
+    } else {
+      // Save current tool and switch to select
+      this.previousToolBeforeSelect = this.currentTool;
+      this.setTool('select');
+    }
+  }
+
   setupHoverActivation() {
     // Setup hover detection for content areas
     document.addEventListener('mousemove', (e) => this.handleContentHover(e));
@@ -1252,6 +1267,12 @@ class ScratchCanvas {
 
     // Prevent ALL drawing-related actions if in quick delete mode or eraser delete mode
     if (this.isQuickDeleteMode || this.isEraserDeleteMode) return;
+
+    // Handle middle mouse button (wheel click) to toggle select tool
+    if (e.button === 1) {
+      this.toggleSelectTool();
+      return;
+    }
 
     // Only allow drawing with left mouse button (button 0)
     if (e.button !== 0) return;
