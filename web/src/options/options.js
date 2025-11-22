@@ -176,12 +176,17 @@ function addNewShortcut() {
       // Notify all active tabs to update their shortcuts
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'updateShortcuts',
-            shortcuts: shortcuts
-          }).catch(() => {
+          try {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'updateShortcuts',
+              shortcuts: shortcuts
+            }, () => {
+              // Ignore response and chrome.runtime.lastError
+              void chrome.runtime.lastError;
+            });
+          } catch (err) {
             // Ignore errors for tabs that don't have the content script
-          });
+          }
         });
       });
     });
@@ -202,12 +207,17 @@ function deleteShortcut(key) {
       // Notify all active tabs to update their shortcuts
       chrome.tabs.query({}, (tabs) => {
         tabs.forEach(tab => {
-          chrome.tabs.sendMessage(tab.id, {
-            action: 'updateShortcuts',
-            shortcuts: shortcuts
-          }).catch(() => {
+          try {
+            chrome.tabs.sendMessage(tab.id, {
+              action: 'updateShortcuts',
+              shortcuts: shortcuts
+            }, () => {
+              // Ignore response and chrome.runtime.lastError
+              void chrome.runtime.lastError;
+            });
+          } catch (err) {
             // Ignore errors for tabs that don't have the content script
-          });
+          }
         });
       });
     });
@@ -247,12 +257,17 @@ function savePaletteSetting(palette) {
     // Notify all active tabs to update their palette
     chrome.tabs.query({ active: true }, (tabs) => {
       tabs.forEach(tab => {
-        chrome.tabs.sendMessage(tab.id, {
-          action: 'updatePalette',
-          palette: palette
-        }).catch(() => {
+        try {
+          chrome.tabs.sendMessage(tab.id, {
+            action: 'updatePalette',
+            palette: palette
+          }, () => {
+            // Ignore response and chrome.runtime.lastError
+            void chrome.runtime.lastError;
+          });
+        } catch (err) {
           // Ignore errors for tabs that don't have the content script
-        });
+        }
       });
     });
   });

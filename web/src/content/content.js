@@ -1810,9 +1810,36 @@ class ScratchCanvas {
     }
   }
 
+  // Helper to determine if the user is currently typing in an editable field
+  isTypingInEditableField(e) {
+    const isEditable = (el) => {
+      if (!el || el === document.body || el === document.documentElement) return false;
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
+      if (el.isContentEditable) return true;
+
+      // ARIA roles commonly used for custom editors
+      const role = (el.getAttribute && el.getAttribute('role')) || '';
+      if (role.toLowerCase() === 'textbox' || role.toLowerCase() === 'searchbox') return true;
+
+      // Walk up the DOM tree to see if we're inside an editable widget
+      if (el.closest) {
+        if (el.closest('input, textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"]')) {
+          return true;
+        }
+      }
+
+      return false;
+    };
+
+    const target = e.target;
+    const activeEl = document.activeElement;
+
+    return isEditable(target) || isEditable(activeEl);
+  }
+
   handleKeyPress(e) {
-    // Ignore if user is typing in an input field
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+    // Ignore all extension shortcuts when the user is typing in any editable field
+    if (this.isTypingInEditableField(e)) {
       return;
     }
 
