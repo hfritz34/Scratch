@@ -1812,32 +1812,63 @@ class ScratchCanvas {
 
   // Helper to determine if the user is currently typing in an editable field
   isTypingInEditableField(e) {
+    const target = e.target;
+    const active = document.activeElement;
+
     const isEditable = (el) => {
-      if (!el || el === document.body || el === document.documentElement) return false;
-      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
-      if (el.isContentEditable) return true;
+      if (!el) return false;
 
-      // ARIA roles commonly used for custom editors
+      // Native editable fields
+      if (
+        el.tagName === 'INPUT' ||
+        el.tagName === 'TEXTAREA' ||
+        el.isContentEditable
+      ) {
+        return true;
+      }
+
+      // ARIA roles
       const role = (el.getAttribute && el.getAttribute('role')) || '';
-      if (role.toLowerCase() === 'textbox' || role.toLowerCase() === 'searchbox') return true;
+      if (['textbox', 'searchbox', 'input', 'combobox'].includes(role.toLowerCase())) {
+        return true;
+      }
 
-      // Walk up the DOM tree to see if we're inside an editable widget
-      if (el.closest) {
-        if (el.closest('input, textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"]')) {
-          return true;
-        }
+      // Custom editors (e.g., Reddit, Twitter, Discord, Gmail)
+      const computed = window.getComputedStyle(el);
+      if (
+        computed.whiteSpace === 'pre-wrap' ||
+        computed.whiteSpace === 'pre-line' ||
+        computed.caretColor !== 'transparent'
+      ) {
+        return true;
+      }
+
+      // Check parent chain
+      if (
+        el.closest &&
+        el.closest('input, textarea, [contenteditable="true"], [role="textbox"], [role="searchbox"]')
+      ) {
+        return true;
+      }
+
+      // Shadow DOM support (Monaco, Notion, Discord)
+      const root = el.getRootNode();
+      if (root instanceof ShadowRoot) {
+        const host = root.host;
+        if (isEditable(host)) return true;
       }
 
       return false;
     };
 
-    const target = e.target;
-    const activeEl = document.activeElement;
-
-    return isEditable(target) || isEditable(activeEl);
+    return isEditable(target) || isEditable(active);
   }
 
   handleKeyPress(e) {
+    // Never act on composition/IME key events
+    if (e && (e.isComposing === true || e.keyCode === 229)) {
+      return;
+    }
     // Ignore all extension shortcuts when the user is typing in any editable field
     if (this.isTypingInEditableField(e)) {
       return;
